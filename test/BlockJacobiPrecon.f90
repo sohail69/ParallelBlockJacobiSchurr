@@ -188,7 +188,7 @@ SUBROUTINE SIZE_MESSAGE_TABLES(nSends, nRecvs, gg_pp, LprocID &
   DO Iel = 1,nel_pp
     DO I = 1,nod
       procID = FIND_NODE_PROC1(gg_pp(I,Iel),nn_pp1,nn_pp2,num,nProcs);
-      IF(procID /= (LprocID+1)) procTable_tmp(procID+1) = 1;
+      IF(procID /= (LprocID+1)) procTable_tmp(procID) = 1;
     ENDDO
   ENDDO
 
@@ -249,10 +249,10 @@ SUBROUTINE FORM_MESSAGE_TABLES(sendTables, recvTables, sendNodes &
   DO Iel = 1,nel_pp
     DO I = 1,nod
       procID = FIND_NODE_PROC1(gg_pp(I,Iel),nn_pp1,nn_pp2,num,nProcs)-1;
-      IF(procID/= LprocID)THEN
+      IF(procID /= LprocID)THEN
         LNodeID = GLOBAL_TO_LOCAL1(gg_pp(I,Iel),nn_pp1,nn_pp2,num,nprocs)
         L = -1;
-	    PROC_SEARCH:DO J = 1,nSends_tmp
+	PROC_SEARCH:DO J = 1,nSends_tmp
           IF(sendTables(1,J) == procID) sendNodes(J,LNodeID) = 1;
           IF(sendTables(1,J) == procID) L=1;
           IF(sendTables(1,J) == procID) EXIT PROC_SEARCH;
@@ -314,29 +314,27 @@ SUBROUTINE SEND_RECV_DATAI(recv_array, recvTable   &
 
   maxMessages = MAX(nSends,nRecvs);
   ALLOCATE(vrequest(maxMessages), vstatus(MPI_STATUS_SIZE,maxMessages))
-  vrequest = 0;
-  vstatus  = 0;
+  vrequest = MPI_REQUEST_NULL;
+
 
   !
   ! Non-blocking sends
   ! the non-locally Owned 
   ! data
   !
-    WRITE(*,*) LprocID, nSends, "pre-ERR1"
   IF(nSends>0)THEN
   DO I = 1,nSends
     pID   = sendTable(1,I);
     psize = sendTable(2,I);
+    WRITE(*,*) "THIS IS :", LprocID, "SENDING TO : ", pID
     CALL MPI_ISEND(send_array(I,:),maxSize,MPI_INTEGER,pID  &
                  , LprocID, MPI_COMM_WORLD,vrequest(I),errMPI)
 
   ENDDO
   ENDIF
-    WRITE(*,*) LprocID, "post-ERR1"
   !
   ! Recieve the Messages
   !
-  WRITE(*,*) LprocID, nrecvs, "pre-ERR2"
   recvTable = -1; !initialise recv table
   IF(nRecvs > 0)THEN
   DO I = 1,nRecvs
@@ -370,10 +368,9 @@ SUBROUTINE SEND_RECV_DATAI(recv_array, recvTable   &
     recvTable(1,I) = pID;
     recvTable(2,I) = maxSize;
     CALL MPI_RECV(recv_array(I,:),maxSize,MPI_INTEGER  &    
-                , MPI_ANY_SOURCE,MPI_ANY_TAG, MPI_COMM_WORLD,vstatus(1,I),errMPI)
+                , pID,MPI_ANY_TAG, MPI_COMM_WORLD,vstatus(1,I),errMPI)
   ENDDO
   ENDIF
-  WRITE(*,*) LprocID, "post-ERR2"
   CALL MPI_WAITALL(maxMessages,vrequest,vstatus,errMPI)
   DEALLOCATE(vrequest, vstatus)
   RETURN
@@ -402,6 +399,7 @@ SUBROUTINE SEND_RECV_DATAR(recv_array, recvTable &
 
   maxMessages = MAX(nSends,nRecvs);
   ALLOCATE(vrequest(maxMessages), vstatus(MPI_STATUS_SIZE,maxMessages))
+  vrequest = MPI_REQUEST_NULL;
 
   !
   ! Non-blocking sends
@@ -537,11 +535,38 @@ ENDSUBROUTINE ASSEMBLE_DIST_MATRIX_EXT
 !/***************************\
 !  Generate the Schurr
 !  complement block jacobi
-!  matrix
+!  matrix inverse used for
+!  preconditioning
 !\***************************/
+SUBROUTINE SCHURR_COMPLEMENT(Pmat,Amat,neqsA,neqsB)
+  IMPLICIT NONE
+  INTEGER                 :: I, J, K, L
+  INTEGER,   INTENT(IN)   :: neqsA, neqsB
+  REAL(iwp), INTENT(IN)   :: Amat(neqsA+neqsB,neqsA+neqsB)
+  REAL(iwp), INTENT(INOUT):: Pmat(neqsA,neqsA)
+  REAL(iwp), ALLOCATABLE  :: BlockMM(:,:), BlockMN(:,:), BlockNM(:,:)
+  REAL(iwp), ALLOCATABLE  :: BlockNN(:,:), BlockNNInv(:,:)
+
+  ALLOCATE(BlockMM(neqsA,neqsA), BlockMN(neqsA,neqsB), BlockNM(neqsB,neqsA))
+  ALLOCATE(BlockNN(neqsB,neqsB), BlockNNInv(neqsB,neqsB))
+
+  I = 1
+  J = neqsA
+  K = neqsA + 1
+  L = neqsA + neqsB
+
+  BlockMM = Amat(I:J,I:J)
+  BlockMN = Amat(I:J,K:L)
+  BlockNM = Amat(K:L,I:J)
+  BlockNN = Amat(K:L,K:L)
+!  CALL INVERT2(BlockNN,BlockNNInv,neqsB)
+  Pmat = BlockMM - MATMUL(BlockMN,MATMUL(BlockNNInv,BlockNM))
 
 
-
+  DEALLOCATE(BlockMM, BlockMN, BlockNM)
+  DEALLOCATE(BlockNN, BlockNNInv)
+  RETURN
+END SUBROUTINE SCHURR_COMPLEMENT
 
 !================================================
 !================================================
