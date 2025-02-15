@@ -148,14 +148,31 @@ PURE FUNCTION GLOBAL_TO_LOCAL1(G_nodeID,nn_pp1,nn_pp2,num,nprocs) RESULT(L_nodeI
   ENDIF
 ENDFUNCTION GLOBAL_TO_LOCAL1
 
+!/***************************\
+!  Find the first position
+!  instance of an integer in
+!  an integer array
+!\***************************/
+FUNCTION FIND_POS1(a, array, nsize) RESULT(I)
+  IMPLICIT NONE
+  INTEGER, INTENT(IN):: nsize
+  INTEGER, INTENT(IN):: a, array(nsize)
+  INTEGER            :: I, J
+
+  I = -1;
+  DO J = 1,nsize
+    IF( a == array(J) ) I = J;
+  ENDDO
+ENDFUNCTION FIND_POS1
+
 
 !/***************************\
 !  Size up the message tables
 !  for local processor using
 !  the element steering array
 !\***************************/
-SUBROUTINE SIZE_MESSAGE_TABLES(nSends, nRecvs, gg_pp, LprocID &
-                             , nProcs, nn, nel, nod, nel_pp)
+SUBROUTINE SIZE_MESSAGE_TABLES_FE(nSends, nRecvs, gg_pp, LprocID &
+                                , nProcs, nn, nel, nod, nel_pp)
   IMPLICIT NONE
   INTEGER                 :: Iel, I, J, K, L, procID, errMPI;
   INTEGER,   INTENT(IN)   :: LprocID, nProcs;
@@ -207,7 +224,7 @@ SUBROUTINE SIZE_MESSAGE_TABLES(nSends, nRecvs, gg_pp, LprocID &
   nRecvs = procTable(LprocID+1);
   DEALLOCATE(procTable, procTable_tmp)
   RETURN
-ENDSUBROUTINE SIZE_MESSAGE_TABLES
+ENDSUBROUTINE SIZE_MESSAGE_TABLES_FE
 
 
 !/***************************\
@@ -323,53 +340,55 @@ SUBROUTINE SEND_RECV_DATAI(recv_array, recvTable   &
   ! data
   !
   IF(nSends>0)THEN
-  DO I = 1,nSends
-    pID   = sendTable(1,I);
-    psize = sendTable(2,I);
-    WRITE(*,*) "THIS IS :", LprocID, "SENDING TO : ", pID
-    CALL MPI_ISEND(send_array(I,:),maxSize,MPI_INTEGER,pID  &
-                 , LprocID, MPI_COMM_WORLD,vrequest(I),errMPI)
+    DO I = 1,nSends
+      pID   = sendTable(1,I);
+      psize = sendTable(2,I);
+!! Writes out a messages for analysis message table analysis
+!! WRITE(*,*) "THIS IS :", LprocID, "SENDING TO : ", pID
+      CALL MPI_ISEND(send_array(I,:),maxSize,MPI_INTEGER,pID  &
+                   , LprocID, MPI_COMM_WORLD,vrequest(I),errMPI)
 
-  ENDDO
+    ENDDO
   ENDIF
+
   !
   ! Recieve the Messages
   !
   recvTable = -1; !initialise recv table
   IF(nRecvs > 0)THEN
-  DO I = 1,nRecvs
-    !
-    ! Message probing loop
-    ! finds unique messages
-    !
-    flagger = .TRUE.
-    DO WHILE(flagger)
-      CALL MPI_PROBE(MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD &
-                    ,vstatus(1,I),errMPI)
-      pID = vstatus(MPI_tag,I);
-      RecvTest = 0;
-      DO k = 1,I-1
-        IF(recvTable(1,K) == pID) RecvTest = RecvTest + 1;
+    DO I = 1,nRecvs
+      !
+      ! Message probing loop
+      ! finds unique messages
+      !
+      flagger = .TRUE.
+      DO WHILE(flagger)
+        CALL MPI_PROBE(MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD &
+                      ,vstatus(1,I),errMPI)
+        pID = vstatus(MPI_tag,I);
+        RecvTest = 0;
+        DO k = 1,I-1
+          IF(recvTable(1,K) == pID) RecvTest = RecvTest + 1;
+        ENDDO
+        IF(RecvTest == 0) flagger = .FALSE.;
       ENDDO
-      IF(RecvTest == 0) flagger = .FALSE.;
+
+      !
+      ! Get expected message
+      ! size
+      !
+      CALL MPI_GET_COUNT(vstatus(1,I),MPI_INTEGER,psize,errMPI)
+
+      !
+      ! Recieve the unique
+      ! message and update
+      ! the recieve log
+      !
+      recvTable(1,I) = pID;
+      recvTable(2,I) = maxSize;
+      CALL MPI_RECV(recv_array(I,:),maxSize,MPI_INTEGER  &    
+                  , pID,MPI_ANY_TAG, MPI_COMM_WORLD,vstatus(1,I),errMPI)
     ENDDO
-
-    !
-    ! Get expected message
-    ! size
-    !
-    CALL MPI_GET_COUNT(vstatus(1,I),MPI_INTEGER,psize,errMPI)
-
-    !
-    ! Recieve the unique
-    ! message and update
-    ! the recieve log
-    !
-    recvTable(1,I) = pID;
-    recvTable(2,I) = maxSize;
-    CALL MPI_RECV(recv_array(I,:),maxSize,MPI_INTEGER  &    
-                , pID,MPI_ANY_TAG, MPI_COMM_WORLD,vstatus(1,I),errMPI)
-  ENDDO
   ENDIF
   CALL MPI_WAITALL(maxMessages,vrequest,vstatus,errMPI)
   DEALLOCATE(vrequest, vstatus)
@@ -406,71 +425,61 @@ SUBROUTINE SEND_RECV_DATAR(recv_array, recvTable &
   ! the non-locally Owned 
   ! data
   !
-  DO I = 1,nSends
-    pID   = sendTable(1,I);
-    psize = sendTable(2,I);
-    CALL MPI_ISEND(send_array(I,1:psize),psize,MPI_REAL8,pID  &
-                 , procID,MPI_COMM_WORLD,vrequest(I),errMPI)
-  ENDDO
+  IF(nSends>0)THEN
+    DO I = 1,nSends
+      pID   = sendTable(1,I);
+      psize = sendTable(2,I);
+!! Writes out a messages for analysis message table analysis
+!! WRITE(*,*) "THIS IS :", LprocID, "SENDING TO : ", pID
+      CALL MPI_ISEND(send_array(I,1:psize),psize,MPI_REAL8,pID  &
+                   , procID,MPI_COMM_WORLD,vrequest(I),errMPI)
+    ENDDO
+  ENDIF
 
   !
   ! Recieve the Messages
   !
   recvTable = -1; !initialise recv table
-  DO I = 1,nRecvs 
-    !
-    ! Message probing loop
-    ! finds unique messages
-    !
-    flagger = .TRUE.
-    DO WHILE(flagger)
-      CALL MPI_PROBE(MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD &
-                    ,vstatus(1,I),errMPI)
-      pID = vstatus(MPI_tag,I);
-      RecvTest = 0;
-      DO k = 1,I-1
-        IF(recvTable(1,K) == pID) RecvTest = RecvTest + 1;
+  IF(nRecvs > 0)THEN
+    DO I = 1,nRecvs 
+      !
+      ! Message probing loop
+      ! finds unique messages
+      !
+      flagger = .TRUE.
+      DO WHILE(flagger)
+        CALL MPI_PROBE(MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD &
+                      ,vstatus(1,I),errMPI)
+        pID = vstatus(MPI_tag,I);
+        RecvTest = 0;
+        DO k = 1,I-1
+          IF(recvTable(1,K) == pID) RecvTest = RecvTest + 1;
+        ENDDO
+        IF(RecvTest == 0) flagger = .FALSE.;
       ENDDO
-      IF(RecvTest == 0) flagger = .FALSE.;
+
+      !
+      ! Get expected message
+      ! size from local table;
+      !
+      CALL MPI_GET_COUNT(vstatus(1,I),MPI_REAL8,psize,errMPI)
+
+      !
+      ! Recieve the unique
+      ! message and update
+      ! the recieve log
+      !
+      recvTable(1,I) = pID;
+      recvTable(2,I) = psize;
+      CALL MPI_RECV(recv_array(I,1:psize),psize,MPI_REAL8 &    
+                  , pID,MPI_ANY_TAG, MPI_COMM_WORLD,vstatus(1,I),errMPI)
     ENDDO
-
-    !
-    ! Get expected message
-    ! size from local table;
-    !
-    CALL MPI_GET_COUNT(vstatus(1,I),MPI_REAL8,psize,errMPI)
-
-    !
-    ! Recieve the unique
-    ! message and update
-    ! the recieve log
-    !
-    recvTable(1,I) = pID;
-    recvTable(2,I) = psize;
-    CALL MPI_RECV(recv_array(I,1:psize),psize,MPI_REAL8 &    
-                , pID,MPI_ANY_TAG, MPI_COMM_WORLD,vstatus(1,I),errMPI)
-  ENDDO
+  ENDIF
   CALL MPI_WAITALL(maxMessages,vrequest,vstatus,errMPI)
   DEALLOCATE(vrequest, vstatus)
   RETURN
 ENDSUBROUTINE SEND_RECV_DATAR
 
-!/***************************\
-!  Find the first position
-!  instance of an integer in
-!  an integer array
-!\***************************/
-FUNCTION FIND_POS1(a, array, nsize) RESULT(I)
-  IMPLICIT NONE
-  INTEGER, INTENT(IN):: nsize
-  INTEGER, INTENT(IN):: a, array(nsize)
-  INTEGER            :: I, J
-
-  I = -1;
-  DO J = 1,nsize
-    IF( a == array(J) ) I = J;
-  ENDDO
-ENDFUNCTION FIND_POS1
 
 !/***************************\
 !  Assemble the element
@@ -561,7 +570,6 @@ SUBROUTINE SCHURR_COMPLEMENT(Pmat,Amat,neqsA,neqsB)
   BlockNN = Amat(K:L,K:L)
 !  CALL INVERT2(BlockNN,BlockNNInv,neqsB)
   Pmat = BlockMM - MATMUL(BlockMN,MATMUL(BlockNNInv,BlockNM))
-
 
   DEALLOCATE(BlockMM, BlockMN, BlockNM)
   DEALLOCATE(BlockNN, BlockNNInv)

@@ -2,13 +2,14 @@
 ! Patch test for the
 ! block-Jacobi precon on
 ! finite elements
-!
 
-
-! mpif90 -o main  BlockJacobiPreconTest.f90 BlockJacobiPrecon.f90 -fallow-argument-mismatch
 !
+! Test1: Tests the Comm table
+!        formation and the matrix
+!        entries for a global matrix
+!        (Partioned size renumbered
+!         entries)
 !
-
 PROGRAM MAIN
   USE BlockJacobiPrecon;
   IMPLICIT NONE
@@ -103,8 +104,8 @@ CALL MPI_BARRIER(MPI_COMM_WORLD,errMPI)
 ! message parity
 !
 !===============================
-  CALL SIZE_MESSAGE_TABLES(nSends, nRecvs, gg_pp, procID &
-                         , nProcs, nn, nel, nod, nel_pp)
+  CALL SIZE_MESSAGE_TABLES_FE(nSends, nRecvs, gg_pp, procID &
+                            , nProcs, nn, nel, nod, nel_pp)
 
   ALLOCATE(sendTables(2,nSends), recvTables(2,nRecvs))
   ALLOCATE(sendNodes(nSends,nn_pp1), recvNodes(nRecvs,nn_pp1))
