@@ -480,6 +480,22 @@ SUBROUTINE SEND_RECV_DATAR(recv_array, recvTable &
   RETURN
 ENDSUBROUTINE SEND_RECV_DATAR
 
+!/***************************\
+!  Local dist assembled matrix
+!  size, finds the size of
+!  the data structures wh
+!\***************************/
+SUBROUTINE LOCAL_MAT_SIZE(Offsets, gg_pp, nod, nodof, nn, nel_pp)
+  IMPLICIT NONE
+  INTEGER                 :: Iel, I, J, K, L, P, Q;
+  INTEGER                 :: pID, procID1, procID2, psize;
+  INTEGER,   INTENT(IN)   :: nn, nodof, nel_pp, nod;
+  INTEGER,   INTENT(IN)   :: gg_pp(nod,nel_pp), Offsets(maxMessages);
+
+
+
+  RETURN
+ENDSUBROUTINE LOCAL_MAT_SIZE
 
 !/***************************\
 !  Assemble the element
@@ -535,8 +551,6 @@ SUBROUTINE ASSEMBLE_DIST_MATRIX_EXT(Amat_dist, AmatElm_pp, Offsets, gg_pp    &
 !Amat_dist() = Amat_dist() + 
 !IF(procID /= LprocID)THEN
 !LNodeID = GLOBAL_TO_LOCAL1(gg_pp(I,Iel),nn_pp1,nn_pp2,num,nprocs)
-
-
   RETURN
 ENDSUBROUTINE ASSEMBLE_DIST_MATRIX_EXT   
 
