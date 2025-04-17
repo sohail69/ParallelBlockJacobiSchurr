@@ -12,4 +12,3 @@ clear
 rm -r *.mod *.o
 
 mpif90 -c BlockJacobiPrecon.f90 -fallow-argument-mismatch
-clear

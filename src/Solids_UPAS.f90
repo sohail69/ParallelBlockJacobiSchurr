@@ -578,95 +578,20 @@ ENDSUBROUTINE SDF_Calc
 
 
 !-------------------------------
-! Isotropic Material Model-Selector
+! Isotropic Material Model
 !-------------------------------
-SUBROUTINE MATERIAL_MODEL_ISO(PK2, C_tang, Fdef, MATPROP, nst, ndim, nprop, material)
-   IMPLICIT NONE
-   INTEGER,   INTENT(IN)   :: nst, ndim, nprop, material;
-   REAL(iwp), INTENT(IN)   :: Fdef(ndim,ndim), MATPROP(nprop);
-   REAL(iwp), INTENT(INOUT):: PK2(nst), C_tang(nst,nst);
-   REAL(iwp)               :: Edef(ndim,ndim), Cdef(ndim,ndim)
-   REAL(iwp)               :: InvarE(3), InvarC(3), InvarF(3)
+SUBROUTINE MATERIAL_MODEL_ISO(PK2, C_tang, Fdef, MATPROP, nst, ndim, nprop)
+  IMPLICIT NONE
+  INTEGER,   INTENT(IN)   :: nst, ndim, nprop, material;
+  REAL(iwp), INTENT(IN)   :: Fdef(ndim,ndim), MATPROP(nprop);
+  REAL(iwp), INTENT(INOUT):: PK2(nst), C_tang(nst,nst);
+  REAL(iwp)               :: Cdef(ndim,ndim), InvarF(3);
 
-   CALL DEFORMATION_MEASURES(Fdef, Edef, Cdef, ndim)
-   CALL DEFORMATION_INVARIANTS(InvarE, Edef, ndim)   
-   CALL DEFORMATION_INVARIANTS(InvarC, Cdef, ndim)   
-   CALL DEFORMATION_INVARIANTS(InvarF, Fdef, ndim)   
-
-   SELECT CASE(material)
-     CASE(1)
-       !Saint-Venant-Kirchoff
-        CALL MATMOD_SVN(C_tang,PK2,MATPROP,InvarE,Edef,ndim,nst,nprop)
-     CASE(2)
-       !Mooney Rivlin
-        CALL MATMOD_MRN(C_tang,PK2,MATPROP,InvarE,Edef,ndim,nst,nprop)
-     CASE(3)
-       !Neo-hookean
-        CALL MATMOD_NOH(C_tang,PK2,MATPROP,InvarF,Cdef,ndim,nst,nprop)
-     CASE DEFAULT
-       !Neo-hookean
-       CALL MATMOD_NOH(C_tang,PK2,MATPROP,InvarF,Cdef,ndim,nst,nprop)
-       WRITE(*,*) "ERROR INVALID MATERIAL CHOICE"
-       WRITE(*,*) "Default to neo-hookean"
-   ENDSELECT
-   RETURN
+  !Neo-hookean
+  CALL DEFORMATION_INVARIANTS(InvarF, Fdef, ndim)   
+  CALL MATMOD_NOH(C_tang,PK2,MATPROP,InvarF,Cdef,ndim,nst,nprop)
+  RETURN
 ENDSUBROUTINE MATERIAL_MODEL_ISO
-
-
-!-------------------------------
-! Saint-Venant-Kirchoff
-!-------------------------------
-SUBROUTINE MATMOD_SVN(C_tang,PK2,Matprops,InvarE,Edef,ndim,nst,nprop)
-   IMPLICIT NONE
-   INTEGER                 :: i, j, k, l, m, n;
-   INTEGER,   INTENT(IN)   :: ndim, nst, nprop
-   REAL(iwp), INTENT(IN)   :: Edef(ndim,ndim), InvarE(3), Matprops(nprop)
-   REAL(iwp), INTENT(INOUT):: C_tang(nst,nst), PK2(nst);
-   REAL(iwp)               :: I1, mu, lmbda, Y, nu;
-   I1    = InvarE(1);
-   Y     = Matprops(1);
-   nu    = Matprops(2);
-   mu    = (4.6_iwp/2.2_iwp)/(Y/(2._iwp+2._iwp*nu))
-   lmbda = Y*nu/((1+nu)*(1._iwp-2._iwp*nu))
-
-   DO m = 1,nst
-     CALL VOIGHT_ITERATOR(m, i, j, nst)
-     PK2(m) = lmbda*I1*Kdelta(i,j) + 2*mu*Edef(i,j);
-     DO n = 1,nst
-       CALL VOIGHT_ITERATOR(n, k, l, nst)
-       C_tang(m,n) = lmbda*Kdelta(i,j)*Kdelta(k,l) + 2*mu*Kdelta(i,k)*Kdelta(j,l);
-     ENDDO
-   ENDDO
-   RETURN
-ENDSUBROUTINE MATMOD_SVN
-
-
-!-------------------------------
-! Mooney-Rivlin
-!-------------------------------
-SUBROUTINE MATMOD_MRN(C_tang,PK2,Matprops,InvarE,Edef,ndim,nst,nprop)
-   IMPLICIT NONE
-   INTEGER                 :: i, j, k, l, m, n;
-   INTEGER,   INTENT(IN)   :: ndim, nst, nprop
-   REAL(iwp), INTENT(IN)   :: Edef(ndim,ndim), InvarE(3), Matprops(nprop)
-   REAL(iwp), INTENT(INOUT):: C_tang(nst,nst), PK2(nst);
-   REAL(iwp)               :: I1, mu, lmbda, Y, nu;
-   I1    = InvarE(1);
-   Y     = Matprops(1);
-   nu    = Matprops(2);
-   mu    = (4.6_iwp/2.2_iwp)/(Y/(2._iwp+2._iwp*nu))
-   lmbda = Y*nu/((1+nu)*(1._iwp-2._iwp*nu))
-
-   DO m = 1,nst
-     CALL VOIGHT_ITERATOR(m, i, j, nst)
-     PK2(m) = lmbda*I1*Kdelta(i,j) + 2*mu*Edef(i,j);
-     DO n = 1,nst
-       CALL VOIGHT_ITERATOR(n, k, l, nst)
-       C_tang(m,n) = lmbda*Kdelta(i,j)*Kdelta(k,l) + 2*mu*Kdelta(i,k)*Kdelta(j,l);
-     ENDDO
-   ENDDO
-   RETURN
-ENDSUBROUTINE MATMOD_MRN
 
 
 !-------------------------------

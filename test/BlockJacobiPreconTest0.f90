@@ -47,7 +47,6 @@ PROGRAM MAIN
   gg_global(:,4) = (/ 4, 8, 9, 7/);
   gg_global(:,5) = (/ 8, 6,10, 9/);
 
-
   CALL PF_PARTITIONER1(nn_pp1, nn_pp2, nn_pp, num_nn, nn, nprocs, procID+1)
   CALL PF_PARTITIONER1(nel_pp1, nel_pp2, nel_pp, num_nel, nel, nprocs, procID+1)
 

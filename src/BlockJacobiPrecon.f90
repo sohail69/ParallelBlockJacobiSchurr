@@ -485,11 +485,11 @@ ENDSUBROUTINE SEND_RECV_DATAR
 !  size, finds the size of
 !  the data structures wh
 !\***************************/
-SUBROUTINE LOCAL_MAT_SIZE(Offsets, gg_pp, nod, nodof, nn, nel_pp)
+SUBROUTINE LOCAL_MAT_SIZE(Offsets, gg_pp, nod, nodof, nn, nel_pp, maxMessages)
   IMPLICIT NONE
   INTEGER                 :: Iel, I, J, K, L, P, Q;
   INTEGER                 :: pID, procID1, procID2, psize;
-  INTEGER,   INTENT(IN)   :: nn, nodof, nel_pp, nod;
+  INTEGER,   INTENT(IN)   :: nn, nodof, nel_pp, nod, maxMessages;
   INTEGER,   INTENT(IN)   :: gg_pp(nod,nel_pp), Offsets(maxMessages);
 
 
