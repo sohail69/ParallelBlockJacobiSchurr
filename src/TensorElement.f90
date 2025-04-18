@@ -29,9 +29,10 @@ SUBROUTINE GaussLengendre1D(weights,points,nip)
   REAL(iwp)               :: JM_e(nip-1), OffDiag, I_d;
   REAL(iwp)               :: eigVecs(nip,nip);
   REAL(iwp), ALLOCATABLE  :: work(:)
-  INTEGER                 :: info, lwork
+  INTEGER(8)              :: info, lwork, nip2
 
-  lwork = MAX(1,2*nip-2)
+  nip2 = nip;
+  lwork = MAX(1,2*nip2-2)
   ALLOCATE(work(lwork))
 
   !
@@ -48,7 +49,7 @@ SUBROUTINE GaussLengendre1D(weights,points,nip)
   !
   ! Solve the Eigen
   ! value problem
-  CALL DSTEV('V', nip, points, JM_e, eigVecs, nip, work, info)
+  CALL DSTEV('V', nip2, points, JM_e, eigVecs, nip2, work, info)
   IF (info /= 0) THEN
     PRINT*, "Error: DSTEV did not converge, INFO =", info
     STOP
@@ -429,27 +430,27 @@ END FUNCTION
 !\***************************************/
 ENDMODULE TensorElement
 
-PROGRAM Main
-  USE TensorElement
-  IMPLICIT NONE
-  INTEGER              :: I, J, nod, nip;
-  INTEGER,  PARAMETER  :: nDIM=3, pOrder=4, nip1D=3;
-  REAL(iwp),ALLOCATABLE:: LegendreND_Ni(:,:), LegendreND_dNi(:,:,:), WeightND(:)
-  REAL(iwp)            :: points(nip1D), weights(nip1D);
-  INTEGER              :: Ivec(nDIM);
-  REAL(iwp),PARAMETER  :: zero=0._iwp
+!PROGRAM Main
+!  USE TensorElement
+!  IMPLICIT NONE
+!  INTEGER              :: I, J, nod, nip;
+!  INTEGER,  PARAMETER  :: nDIM=3, pOrder=4, nip1D=3;
+!  REAL(iwp),ALLOCATABLE:: LegendreND_Ni(:,:), LegendreND_dNi(:,:,:), WeightND(:)
+!  REAL(iwp)            :: points(nip1D), weights(nip1D);
+!  INTEGER              :: Ivec(nDIM);
+!  REAL(iwp),PARAMETER  :: zero=0._iwp
 
-  ! mpif90 -o main TensorElement.f90 -llapack -lblas  &> log.errs
-  nip = nip1D**nDIM;
-  nod = (pOrder+1)**nDIM;
-  ALLOCATE(LegendreND_Ni(nod,nip), LegendreND_dNi(nDIM,nod,nip), WeightND(nip))
-  CALL GaussLengendre1D(weights,points,nip1D)
-  CALL CalculateNDWeights(WeightND,weights,nip,nip1D,nDIM)
-  CALL TENSOR_ELEMENT_NDPoly(LegendreND_Ni, LegendreND_dNi, points, pOrder, nip1D, nod, nip, nDIM)
+  ! mpif90 -o main TensorElement.f90 -llapack64 -lblas64  &> log.errs
+!  nip = nip1D**nDIM;
+!  nod = (pOrder+1)**nDIM;
+!  ALLOCATE(LegendreND_Ni(nod,nip), LegendreND_dNi(nDIM,nod,nip), WeightND(nip))
+!  CALL GaussLengendre1D(weights,points,nip1D)
+!  CALL CalculateNDWeights(WeightND,weights,nip,nip1D,nDIM)
+!  CALL TENSOR_ELEMENT_NDPoly(LegendreND_Ni, LegendreND_dNi, points, pOrder, nip1D, nod, nip, nDIM)
 
-  DO I = 1,nip
-    WRITE(*,*) WeightND(I)
-  ENDDO
+!  DO I = 1,nip
+!    WRITE(*,*) WeightND(I)
+!  ENDDO
 
-  DEALLOCATE(LegendreND_Ni, LegendreND_dNi)
-END PROGRAM Main
+!  DEALLOCATE(LegendreND_Ni, LegendreND_dNi)
+!END PROGRAM Main
