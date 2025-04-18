@@ -12,3 +12,5 @@ clear
 rm -r *.mod *.o
 
 mpif90 -c BlockJacobiPrecon.f90 -fallow-argument-mismatch
+mpif90 -c TensorElement.f90
+mpif90 -c Solids_pFEM_UAS.f90

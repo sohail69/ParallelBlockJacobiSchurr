@@ -429,28 +429,3 @@ END FUNCTION
 !/***************************************\
 !\***************************************/
 ENDMODULE TensorElement
-
-!PROGRAM Main
-!  USE TensorElement
-!  IMPLICIT NONE
-!  INTEGER              :: I, J, nod, nip;
-!  INTEGER,  PARAMETER  :: nDIM=3, pOrder=4, nip1D=3;
-!  REAL(iwp),ALLOCATABLE:: LegendreND_Ni(:,:), LegendreND_dNi(:,:,:), WeightND(:)
-!  REAL(iwp)            :: points(nip1D), weights(nip1D);
-!  INTEGER              :: Ivec(nDIM);
-!  REAL(iwp),PARAMETER  :: zero=0._iwp
-
-  ! mpif90 -o main TensorElement.f90 -llapack64 -lblas64  &> log.errs
-!  nip = nip1D**nDIM;
-!  nod = (pOrder+1)**nDIM;
-!  ALLOCATE(LegendreND_Ni(nod,nip), LegendreND_dNi(nDIM,nod,nip), WeightND(nip))
-!  CALL GaussLengendre1D(weights,points,nip1D)
-!  CALL CalculateNDWeights(WeightND,weights,nip,nip1D,nDIM)
-!  CALL TENSOR_ELEMENT_NDPoly(LegendreND_Ni, LegendreND_dNi, points, pOrder, nip1D, nod, nip, nDIM)
-
-!  DO I = 1,nip
-!    WRITE(*,*) WeightND(I)
-!  ENDDO
-
-!  DEALLOCATE(LegendreND_Ni, LegendreND_dNi)
-!END PROGRAM Main

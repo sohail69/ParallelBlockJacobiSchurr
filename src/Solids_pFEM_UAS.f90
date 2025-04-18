@@ -43,7 +43,7 @@ SUBROUTINE SOLID_PFEM_UAS_ELM(Km, Rm, utemp, gama, fibre, MATPROP   &
     ! tranform from ref-to-physical
     Jac = MATMUL(dNi(:,:,Ig), coord(:,:))
     CALL Invert2(Jac, Jacinv, nDIM)
-    det(Ig) = Jac(1,1)
+    det(Ig) = DETERMINANT(Jac)
 
     ! Calculate the active strain
     ! components of the tensors
@@ -157,7 +157,7 @@ SUBROUTINE MATMOD_NOH(C_ijkl,S_ij,Matprops,Fdef,ndim,nst,nprop)
    REAL(iwp)               :: LJ3, J3, mu, lmbda, Y, nu;
    REAL(iwp)               :: Cdef(ndim,ndim), C_inv(ndim,ndim);
 
-   J3    = DETERMINANT3(Fdef)
+   J3    = DETERMINANT(Fdef)
    LJ3   = DLOG(J3)
    Y     = Matprops(1);  ! 1.00_iwp 
    nu    = Matprops(2); !0.49999_iwp !
@@ -227,8 +227,17 @@ SUBROUTINE VOIGHT_ITERATOR(k, i, j, nst)
 ENDSUBROUTINE VOIGHT_ITERATOR
 
 !-------------------------------------
-!  Determinant for 2by2 Matrix
+!  Determinant for small Matrices
 !-------------------------------------
+PURE FUNCTION DETERMINANT(Amat) RESULT(det)
+  IMPLICIT NONE
+  REAL(iwp), INTENT(IN) :: Amat(:,:)
+  REAL(iwp)             :: det
+  
+  det = Amat(1,1)
+ENDFUNCTION DETERMINANT
+
+
 PURE FUNCTION DETERMINANT2(Amat) RESULT(det)
   IMPLICIT NONE
   REAL(iwp), INTENT(IN) :: Amat(2,2)
@@ -238,9 +247,6 @@ PURE FUNCTION DETERMINANT2(Amat) RESULT(det)
   det = Amat(1,1)*Amat(2,2) - Amat(1,2)*Amat(2,1)
 ENDFUNCTION DETERMINANT2
 
-!-------------------------------------
-!  Determinant for 3by3 Matrix
-!-------------------------------------
 PURE FUNCTION DETERMINANT3(Amat) RESULT(det)
   IMPLICIT NONE
   REAL(iwp), INTENT(IN) :: Amat(3,3)
@@ -301,45 +307,3 @@ END SUBROUTINE SDF_MAP
 !-------------------------------
 !-------------------------------
 ENDMODULE SolidPFEM_UAS
-
-PROGRAM MAIN
-  USE SolidPFEM_UAS;
-  USE TensorElement
-  IMPLICIT NONE
-  INTEGER :: I, J;
-  INTEGER,   PARAMETER :: nprop=2, ndim=1, nip1D=2, nod=5, pOrder=4;
-  INTEGER,   PARAMETER :: ntots=ndim*nod;
-  INTEGER,   PARAMETER :: nst=(((ndim+1)*ndim)/2)
-  INTEGER,   PARAMETER :: nip = nip1D**ndim;
-  REAL(iwp), PARAMETER :: zero = 0._iwp, one = 1._iwp;
-  REAL(iwp)            :: gama(nod), fibre(ndim,ndim), utemp(ntots), MATPROP(nprop);
-  REAL(iwp)            :: Ni1D(nod,nip1D), dNi1D(nod,nip1D), points1D(nip1D),  weights1D(nip1D);  
-  REAL(iwp)            :: Ni(nod,nip), dNi(ndim,nod,nip);
-  REAL(iwp)            :: coord(nod,ndim), weights(nip);
-  REAL(iwp)            :: Km(ntots,ntots), Rm(ntots);
-
-  ! gfortran -o main Solids_pFEM_UAS.90
-  ! gfortran -c TensorElement.f90 Solids_pFEM_UAS.f90
-  ! gfortran -o main TensorElement.o Solids_pFEM_UAS.o -llapack -lblas  &> log.errs
-
-  CALL GaussLengendre1D(weights1D,points1D,nip1D)
-  CALL CalculateNDWeights(weights,weights1D,nip,nip,nDIM)
-  CALL TENSOR_ELEMENT_NDPoly(Ni, dNi, points1D, pOrder, nip1D, nod, nip, nDIM)
-
-   MATPROP(1) = 1.00_iwp;
-   MATPROP(2) = 0.49999_iwp;
-   gama  = 0.01;
-   fibre = 1.0_iwp
-   utemp = 0.0001_iwp;
-
-   coord(1,1) = 0._iwp
-   coord(2,1) = 1._iwp
-
-  CALL SOLID_PFEM_UAS_ELM(Km, Rm, utemp, gama, fibre, MATPROP   &
-                        , coord, Ni, dNi, weights, nprop, ntots &
-                        , ndim, nst, nip, nod)
-
-  DO I = 1,ntots
-    WRITE(*,*) Km(I,:)
-  ENDDO
-END PROGRAM MAIN
