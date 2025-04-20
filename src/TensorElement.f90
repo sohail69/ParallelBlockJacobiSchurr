@@ -329,7 +329,7 @@ ENDSUBROUTINE TENSOR_ELEMENT_NDPoly
 ! Calculates the gaussian integration rules
 ! weights for an N-dimensional Tensor
 ! element
-! Inputs:
+! Inputs:\
 !   M           = Flattened ND iterator
 !   nDIM        = Dimension of the problem
 !   nSize1D     = Size of each iterator
@@ -388,42 +388,6 @@ SUBROUTINE InverseIterator(M,Iters,nSize1D,nDIM)
   Iters = Iters + 1;
   RETURN
 ENDSUBROUTINE InverseIterator
-
-!/***************************************\
-! Inverse iterator, takes a 1D array input
-! and converts it to n-D input used to help
-! construct arbitrary dimensional tensor 
-! shape functions from a single dimensional 
-! line shape functions
-! Expected Outputs
-! 1 => Pure Nodal Mode
-! 2 => Pure Edge Mode
-! 3 => Pure Face Mode
-! 4 => Pure Volume Mode
-! Inputs:
-!   M           = Flattened ND iterator
-!   nDIM        = Dimension of the problem
-!   nSize1D     = Size of each iterator
-!                 in reference 1D
-! Outputs:
-!   Iters(nDIM) = Unpacked ND Iterators
-!                 in each dimension
-!\***************************************/
-PURE FUNCTION MODE_DETECTION_ND(Iters, nDIM) RESULT(Mode)
-  INTEGER, INTENT(IN):: nDIM, Iters(nDIM)
-  INTEGER            :: I, J, Mode
-
-  Mode=1;
-  DO I = 1,nDIM
-    IF(Iters(I)>2) Mode = Mode + 1;
-  ENDDO
-END FUNCTION
-
-
-!The Hierachical Higher order tensor elements 
-!have to be mapped to the qaudratic element
-!as it has all entities needed in a given 
-!dimension
 
 
 !/***************************************\

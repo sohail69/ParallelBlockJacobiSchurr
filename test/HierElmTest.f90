@@ -1,9 +1,30 @@
+
+SUBROUTINE VertexModes(Verts, nVerts, ndim)
+  USE TensorElement
+  INTEGER, INTENT(IN)   :: nVerts, ndim
+  INTEGER, INTENT(INOUT):: Verts(nVerts,ndim);
+  INTEGER               :: Ivert, I, J, K;
+  REAL(iwp)             :: IvertR;
+  INTEGER, PARAMETER    :: modes(4) = (/1,2,2,1/);
+
+  DO Ivert = 1,nVerts
+    DO I = 1,ndim
+      IvertR = REAL(Ivert,iwp)/(2._iwp**(I-1))
+      K = CEILING(IvertR);
+      J = MOD(K - 1, 4) + 1;
+      Verts(Ivert,I) = modes(J);
+    ENDDO
+  ENDDO
+  RETURN
+END SUBROUTINE VertexModes
+
+
 PROGRAM MAIN
   USE SolidPFEM_UAS;
   USE TensorElement
   IMPLICIT NONE
   INTEGER :: I, J;
-  INTEGER,   PARAMETER :: nprop=2, ndim=1, nip1D=2, nod=5, pOrder=4;
+  INTEGER,   PARAMETER :: nprop=2, ndim=2, nip1D=2, nod=4, pOrder=1;
   INTEGER,   PARAMETER :: ntots=ndim*nod;
   INTEGER,   PARAMETER :: nst=(((ndim+1)*ndim)/2)
   INTEGER,   PARAMETER :: nip = nip1D**ndim;
@@ -22,16 +43,33 @@ PROGRAM MAIN
    MATPROP(2) = 0.49999_iwp;
    gama  = 0.01;
    fibre = 1.0_iwp
-   utemp = 0.0001_iwp;
+   utemp    = 0.0_iwp;
+   utemp(6) = 0.001_iwp;
 
    coord(1,1) = 0._iwp
-   coord(2,1) = 1._iwp
+   coord(1,2) = 0._iwp
+
+   coord(2,1) = 0._iwp
+   coord(2,2) = 1._iwp
+
+   coord(3,1) = 1._iwp
+   coord(3,2) = 0._iwp
+
+   coord(4,1) = 1._iwp
+   coord(4,2) = 1._iwp
 
   CALL SOLID_PFEM_UAS_ELM(Km, Rm, utemp, gama, fibre, MATPROP   &
                         , coord, Ni, dNi, weights, nprop, ntots &
                         , ndim, nst, nip, nod)
 
 
+
+  OPEN(UNIT=(12),FILE = "testResult/HierTest_mesh.txt")
+  DO I = 1,nod
+    WRITE(12,*) coord(I,:)
+  ENDDO
+  WRITE(12,*) coord(1,:)
+  CLOSE(12)
 
   OPEN(UNIT=(12),FILE = "testResult/HierTest.txt")
   DO I = 1,ntots
