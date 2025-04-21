@@ -6,6 +6,11 @@ CONTAINS
 !/***************************************\
 ! Node numberings for tensor
 ! element (Line, quad, hex etc..)
+!
+! The Nodal ordering in terms of entities
+! is:
+! Node_no = (Vertices, Edges, Faces, Volms)
+!
 !\***************************************/
 SUBROUTINE NODE_NUMBERINGS(Node_no, pOrder, nod, ndim)
   IMPLICIT NONE
@@ -62,7 +67,7 @@ SUBROUTINE NODE_NUMBERINGS(Node_no, pOrder, nod, ndim)
   ! Calculate the vertex numbering
   IF(nVolms /= 0)THEN
     ALLOCATE(Volms(ndim,nVolms))
-
+    CALL VolmModes(Volms, nVolms, pOrder, ndim)
     I = nVerts + nEdges + nFaces + 1;
     J = nVerts + nEdges + nFaces + nVolms;
     Node_no(:,I:J) = Volms(:,:)
@@ -129,9 +134,12 @@ SUBROUTINE FaceModes(Faces, nFaces, pOrder, ndim)
   REAL(iwp)             :: IfaceR;
   INTEGER, PARAMETER    :: modes(4) = (/1,2,2,1/);
 
-  DO Iface = 1,nFaces
-    DO I = 1,ndim
-
+  nFacesQ = (ndim-1)*ndim*2**(ndim-3)
+  nFaces = nFacesQ*(pOrder-1)*(pOrder-1);
+  DO
+   Iface = 1,nFaces
+    DO I = 1,ndim-1
+      DO
 
 
     ENDDO
@@ -146,15 +154,12 @@ END SUBROUTINE FaceModes
 SUBROUTINE VolmModes(Volms, nVolms, pOrder, ndim)
   INTEGER, INTENT(IN)   :: nVolms, pOrder, ndim
   INTEGER, INTENT(INOUT):: Volms(ndim,nVolms);
-  INTEGER               :: Ivolm, I, J, K;
-  REAL(iwp)             :: IvolmR;
+  INTEGER               :: Ivolm, Iters(ndim);
   INTEGER, PARAMETER    :: modes(4) = (/1,2,2,1/);
 
   DO Ivolm = 1,nVolms
-    DO I = 1,ndim
-      
-
-    ENDDO
+    CALL InverseIterator(Ivolm,Iters,pOrder-1,nDIM)
+    Volms(:,Ivolm) = Iters;
   ENDDO
   RETURN
 END SUBROUTINE VolmModes
