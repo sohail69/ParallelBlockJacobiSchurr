@@ -41,8 +41,10 @@ PROGRAM MAIN
 
    MATPROP(1) = 1.00_iwp;
    MATPROP(2) = 0.49999_iwp;
-   gama  = 0.01;
-   fibre = 1.0_iwp
+   gama     = 0.01;
+   fibre    = zero;
+   DO I = 1,ndim; fibre(I,I) = one; ENDDO
+
    utemp    = 0.0_iwp;
    utemp(6) = 0.001_iwp;
 

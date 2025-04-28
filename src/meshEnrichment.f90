@@ -108,7 +108,22 @@ SUBROUTINE EdgeModes(Edges, nEdgesQ, nEdges, pOrder, ndim)
   INTEGER, INTENT(INOUT):: Edges(ndim,nEdges);
   INTEGER               :: Iedge, Idir, IedgeQ, I, J, K;
   REAL(iwp)             :: IedgeR;
-  INTEGER, PARAMETER    :: modes(4) = (/1,2,2,1/);
+  INTEGER               :: cNodesI(ndim,nEdgesQ);
+
+  !Can be 1, 2 or zero
+  SELECT CASE(ndim)
+    CASE(1)
+      cNodesI(1,:) = (/0/);
+    CASE(2)
+      cNodesI(1,:) = (/1,0,1,0/);
+      cNodesI(2,:) = (/0,1,0,1/);
+    CASE(3)
+      cNodesI(1,:) = (/1,2,1,2,3,3,3,3,1,2,1,2/);
+      cNodesI(2,:) = (/1,2,1,2,3,3,3,3,1,2,1,2/);
+      cNodesI(3,:) = (/1,2,1,2,3,3,3,3,1,2,1,2/);
+    CASE DEFAULT
+      WRITE(*,*) "Error higher than 3D edges not supported"
+  END SELECT
 
   DO Iedge = 1,nEdgesQ
     K = 

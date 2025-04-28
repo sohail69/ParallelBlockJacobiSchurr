@@ -16,44 +16,38 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
   INTEGER                :: Ig, i, j, k, l, p, q, m, n, o, s, t;
   INTEGER,  INTENT(IN)   :: nprop, ntots, ndim, nst;
   INTEGER,  INTENT(IN)   :: nip, nodU, nodp, ndofU, ndofP
-  REAL(iwp),INTENT(IN)   :: astrain(nodU), fibre(ndim,ndim);
-  REAL(iwp),INTENT(IN)   :: utemp(ntots), MATPROP(nprop);
-  REAL(iwp),INTENT(IN)   :: coord(nodU,ndim), weights(nip)
+  REAL(iwp),INTENT(IN)   :: astrain(nodU,nel_pp), fibre(ndim,ndim,nel_pp);
+  REAL(iwp),INTENT(IN)   :: utemp(ntots,nel_pp), MATPROP(nprop);
+  REAL(iwp),INTENT(IN)   :: coord(nodU,ndim,nel_pp), weights(nip)
   REAL(iwp),INTENT(IN)   :: dNi_p(ndim,nodP,nip), Ni_p(nodP,nip)
   REAL(iwp),INTENT(IN)   :: dNi_u(ndim,nodU,nip), Ni_u(nodU,nip)
-  REAL(iwp),INTENT(INOUT):: Km(ntots,ntots), Rm(ntots);
+  REAL(iwp),INTENT(INOUT):: Km(ntots,ntots,nel_pp), Rm(ntots,nel_pp);
   REAL(iwp),PARAMETER    :: zero = 0._iwp, one = 1._iwp;
 
+  !Deformation related terms
+  REAL(iwp):: S_kk(nip), C_kkpp(nip)
+  REAL(iwp):: C_ijkl(nst,nst,nip), S_ij(nst,nip), CdefInv(ndim,ndim,nip)
+  REAL(iwp):: strain, gamma_f, gamma_n, gamma_s, press(nip);
+  REAL(iwp):: Fdef(ndim,ndim), Fedef(ndim,ndim), F0def(ndim,ndim);
+  REAL(iwp):: Cdef(ndim,ndim), F0inv(ndim,ndim);
+  REAL(iwp):: dE(nst,ndofU,nip), d2E(nst,ndofU,ndofU,nip);
+
+
+  !Shape function and derivatives
+  REAL(iwp):: Jac(ndim,ndim), Jacinv(ndim,ndim), det(nip);
+  REAL(iwp):: Y, nu, mu, lmbda, LJ3;
 
   !Residual and jacobian components
   REAL(iwp):: R1(ndofU), R2(ndofP), J3;
   REAL(iwp):: J11(ndofU,ndofU), J12(ndofU,ndofP);
   REAL(iwp):: J21(ndofP,ndofU), J22(ndofP,ndofP);
 
-  !Deformation related terms
-  REAL(iwp):: C_ijkl(nst,nst,nip1), S_ij(nst)
-  REAL(iwp):: pressure, strain, gamma_f, gamma_n, gamma_s;
-  REAL(iwp):: Fdef(ndim,ndim), Fedef(ndim,ndim), F0def(ndim,ndim);
-  REAL(iwp):: Cdef(ndim,ndim), CdefInv(ndim,ndim), F0inv(ndim,ndim);
-  REAL(iwp):: dE(nst,ndofU,nip), d2E(nst,ndofU,ndofU,nip);
 
-  !Shape function and derivatives
-  REAL(iwp):: Jac(ndim,ndim), Jacinv(ndimdddddddd,ndim), det(nip);
-  REAL(iwp):: Y, nu, mu, lmbda, LJ3;
-
-
-xCoord(ndim,nod,nel_pp)
-dNi_p(ndim,nodP,nip), Ni_p(nodP,nip)
-dNi_u(ndim,nodU,nip), Ni_u(nodU,nip)
-
-
-  Km     = zero;    Rm   = zero;
-  C_ijkl = zero;    S_ij = zero;    Fedef  = zero;
-  dE     = zero;    d2E  = zero;
-
-
-  SDF      = zero;    Jac     = zero;    Jacinv = zero;    det   = zero;
-  Cdef     = zero;    CdefInv = zero;    Fdef   = zero;
+  Km     = zero;  Rm      = zero;
+  C_ijkl = zero;  S_ij    = zero;   Fedef  = zero;
+  dE     = zero;  d2E     = zero;
+  Jac    = zero;  Jacinv  = zero;   det    = zero;
+  Cdef   = zero;  CdefInv = zero;   Fdef   = zero;
 
 !===
 !
@@ -61,62 +55,98 @@ dNi_u(ndim,nodU,nip), Ni_u(nodU,nip)
 !
 !====
 ELEMENTS:DO Iel = 1, nel_pp
-  !Calculate the stiffness, stress
-  !and strains measure at sample
-  !points
-  DO Ig = 1,nip
+  !-----
+  ! Calculate the stress,
+  ! tangent-stiffness and
+  ! deformation measures at
+  ! the gauss-points
+  !-----
+  CALL SDF_MAP(Map, nod, ndim)
+  DO I=1,ndim
+    auxm(I,:) = utemp(Map(I,:));
+  ENDDO
 
+  GAUSS_PTS1: DO Ig = 1,nip
+    ! Calculate the coordinate
+    ! tranform from ref-to-physical
+    Jac = MATMUL(dNi(:,:,Ig), coord(:,:))
+    CALL Invert2(Jac, Jacinv, nDIM)
+    det(Ig) = DETERMINANT(Jac)
+
+    ! Calculate the active strain
+    ! components of the tensors
+    strain = DOT_PRODUCT(Ni_u(:,Ig),gama(:))
+    gamma_f =  -strain;
+    gamma_n =  4._iwp*gamma_f;
+    gamma_s = (one/((one + gamma_f)*(one + gamma_n))) - one;
+    DO i = 1,ndim
+      DO j = 1,ndim
+        F0def(i,j) = Kdelta(i,j) + gamma_f*fibre(i,1)*fibre(j,1)
+        IF(ndim > 2) F0def(i,j) = F0def(i,j) + gamma_s*fibre(i,2)*fibre(j,2)
+        IF(ndim > 2) F0def(i,j) = F0def(i,j) + gamma_n*fibre(i,3)*fibre(j,3)
+      ENDDO
+    ENDDO GAUSS_PTS1
+    CALL INVERT2(F0def,F0inv,ndim)
+
+   ! Calculate the standard
+   ! displacement component
+    Fdef = zero;
+    DO I = 1,ndim; DO J = 1,ndim
+      Fdef(I,J) = Fdef(I,J) + DOT_PRODUCT(dNi_u(J,:,Ig),auxm(I,:));
+      IF(I==J) Fdef(I,J) = Fdef(I,J) + one;
+    ENDDO; ENDDO
 
     ! Calculate the stress, stiffness
     ! and strain measures/derivatives
     Fedef = MATMUL(Fdef,F0Inv)
     CALL GREENLAGRANGE_DERIVATIVES_AS(Fdef,F0Inv,SDF,dE(:,:,Ig),d2E(:,:,:,Ig),ndim,ndofU,nodU,nst)
+    CALL INVERT2(Cdef,CdefInv(:,:,Ig),ndim); 
     CALL MATMOD_NOH(C_ijkl(:,:,Ig),S_ij(:,Ig),Matprops,Fdef,ndim,nst,nprop)
+    DO m = 1,ndim
+      S_kk(Ig) = S_kk(Ig) + S_ij(m,Ig);
+      DO n = 1,ndim
+        C_kkpp(Ig) = C_kkpp(Ig) + C_ijkl(m,n,Ig)
+      ENDDO
+    ENDDO
+
+    !Calculating the pressure
+    !at the Gauss points
+    press(Ig) = DOT_PRODUCT()
   ENDDO
 
-  !Integrate the residual and
-  !Jacobian contributions
-  DO Ig = 1,nip
+!xCoord(ndim,nod,nel_pp)
+!dNi_p(ndim,nodP,nip), Ni_p(nodP,nip)
+!dNi_u(ndim,nodU,nip), Ni_u(nodU,nip)
+!nip, nodU, nodp, ndofU, ndofP
 
+  !-----
+  ! Integrate the residuals
+  ! and the Jacobians
+  !-----
+  DO M = 1,ntots
+    GAUSS_PTS2: DO Ig = 1,nip
+
+      ! UU-block
+      DO s = 1,nst
+        CALL VOIGHT_ITERATOR(s,I,J,nst)
+        Rm(M) = Rm(M) + dE(s,M,Ig)*S_ij(s,Ig)*det(Ig)*weights(Ig);
+                          CdefInv(I,J,Ig)
+
+
+        Km(M,:) = Km(M,:) + S_ij(s,Ig)*d2E(s,:,M,Ig)*det(Ig)*weights(Ig);
+        DO t = 1,nst
+          Km(M,:) = Km(M,:) + dE(s,M,Ig)*C_ijkl(s,t,Ig)*dE(t,:,Ig)*det(Ig)*weights(Ig);
+        ENDDO
+      ENDDO
+
+
+    END DO GAUSS_PTS2
   ENDDO
+
+
 ENDDO ELEMENTS
 
 
-  GAUSS_PTS1: DO Ig=1,nip
-    !-----
-    !Deformation Measure Calcs
-    !-----
-    strain  = DOT_PRODUCT(funU,astrain)
-    gamma_f = -strain;
-    gamma_n =  4._iwp*gamma_f;
-    gamma_s = (one/((one + gamma_f)*(one + gamma_n))) - one;
-    F0def = zero;
-    DO i = 1,ndim
-      DO j = 1,ndim
-        F0def(i,j) = Kdelta(i,j) + gamma_f*fibre(i,1)*fibre(j,1)
-        IF(ndim > 1) F0def(i,j) = F0def(i,j) + gamma_s*fibre(i,2)*fibre(j,2)
-        IF(ndim > 2) F0def(i,j) = F0def(i,j) + gamma_n*fibre(i,3)*fibre(j,3)
-      ENDDO
-    ENDDO
-    CALL INVERT2(F0def, F0inv, ndim);
-
-
-    Fdef  = MATMUL(derivU,auxm)
-    DO i = 1,ndim; Fdef(i,i) = Fdef(i,i) + one; ENDDO;
-    Fedef = MATMUL(Fdef,F0inv)
-    CALL SDF_Calc(SDF, derivU, SFMAP, ndim, nodU, ndofU)
-    CALL GREENLAGRANGE_DERIVATIVES_AS(Fdef,F0Inv,SDF,dE,d2E,ndim,ndofU,nodU,nst)
-
-    !-----
-    !Material Model calcs
-    !-----
-    CALL MATERIAL_MODEL_ISO(S_ij, C_ijkl, Fedef, MATPROP, nst, ndim, nprop, material)
-    
-    !-----
-    !Residual and jacobian calcs
-    !-----
-    R1  = zero;
-    J11 = zero;
 
     J11 = J11 + MATMUL(TRANSPOSE(dE),MATMUL(C_ijkl,dE))
     DO s =1,nst
@@ -124,67 +154,6 @@ ENDDO ELEMENTS
       J11 = J11 + S_ij(s)*d2E(s,:,:)
     ENDDO
 
-    !
-    ! Residuals and Jacobian components
-    !
-    Rtemp = zero;
-    Jtemp = zero;
-
-    Rtemp(1:ndofU) = R1
-    Jtemp(1:ndofU,1:ndofU)   = J11
-
-    Rm = Rm + Rtemp*det*weights(Ig);
-    Km = Km + Jtemp*det*weights(Ig);
-  END DO GAUSS_PTS1
-
-!
-! Reduced Integration
-!
-  Y     = 1.00_iwp;
-  nu    = 0.49999_iwp;
-  mu    = (4.6_iwp/2.2_iwp)/(Y/(2._iwp+2._iwp*nu))
-  lmbda = Y*nu/((1+nu)*(1._iwp-2._iwp*nu))
-  GAUSS_PTS2: DO Ig=1,nip2
-    !-----
-    !Discrete field interpolation functions
-    !-----
-    IF(standardTest.OR.Hexa27test)THEN
-      Jac = MATMUL(derU,coord)
-      det = determinant(Jac);
-      CALL INVERT2(Jac, Jacinv, ndim);
-      derivU = MATMUL(Jacinv,derU);
-    ENDIF
-
-    !-----
-    !Deformation Measure Calcs
-    !-----
-    strain  = DOT_PRODUCT(funU,astrain)
-    gamma_f = -strain;
-    gamma_n =  4._iwp*gamma_f;
-    gamma_s = (one/((one + gamma_f)*(one + gamma_n))) - one;
-    F0def = zero;
-    DO i = 1,ndim
-      DO j = 1,ndim
-        F0def(i,j) = Kdelta(i,j) + gamma_f*fibre(i,1)*fibre(j,1)
-        IF(ndim > 1) F0def(i,j) = F0def(i,j) + gamma_s*fibre(i,2)*fibre(j,2)
-        IF(ndim > 2) F0def(i,j) = F0def(i,j) + gamma_n*fibre(i,3)*fibre(j,3)
-      ENDDO
-    ENDDO
-    CALL INVERT2(F0def, F0inv, ndim);
-
-    Fdef  = MATMUL(derivU,auxm)
-    DO i = 1,ndim; Fdef(i,i) = Fdef(i,i) + one; ENDDO;
-    Fedef = MATMUL(Fdef,F0inv)
-    CALL SDF_Calc(SDF, derivU, SFMAP, ndim, nodU, ndofU)
-    CALL GREENLAGRANGE_DERIVATIVES_AS(Fdef,F0Inv,SDF,dE,d2E,ndim,ndofU,nodU,nst)
-
-
-   !===========================================
-   !===========================================
-   !  Integrate the pressure-displacement
-   !  and pure-pressure terms Peturbed Lagrangian
-   !===========================================
-   !==========================================
     CALL SHAPE_FUN(funP,points2,Ig);
     funnyP(1,:) = funP(abaqustosg)
     Cdef = MATMUL(TRANSPOSE(Fedef),Fedef);
@@ -204,14 +173,16 @@ ENDDO ELEMENTS
         ENDDO; ENDDO
       ENDDO
     ENDDO
-	
+
+  Y     = 1.00_iwp;
+  nu    = 0.49999_iwp;
+  mu    = (4.6_iwp/2.2_iwp)/(Y/(2._iwp+2._iwp*nu))
+  lmbda = Y*nu/((1+nu)*(1._iwp-2._iwp*nu))
+
+
     R2  = R2  + (DLOG(J3) - (pressure/lmbda))*funnyP(1,:)
     J22 = (-J3/lmbda)*MATMUL(TRANSPOSE(funnyP(:,:)),funnyP(:,:))
 
-
-    Rm = Rm + Rtemp*det*weights2(Ig);
-    Km = Km + Jtemp*det*weights2(Ig);
-  END DO GAUSS_PTS2
 
   !-----
   ! Integrate the residuals
@@ -294,8 +265,8 @@ SUBROUTINE MATMOD_NOH(C_ijkl,S_ij,Matprops,Fdef,ndim,nst,nprop)
 
    J3    = determinant(Fdef)
    LJ3   = DLOG(J3)
-   Y     = 1.00_iwp !Matprops(1);
-   nu    = 0.49999_iwp !Matprops(2);
+   Y     = Matprops(1); !1.00_iwp    !
+   nu    = Matprops(2); !0.49999_iwp !
 
    mu    = (4.6_iwp/2.2_iwp)/(Y/(2._iwp+2._iwp*nu))
    lmbda = Y*nu/((1+nu)*(1._iwp-2._iwp*nu))
