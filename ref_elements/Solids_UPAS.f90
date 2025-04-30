@@ -144,54 +144,40 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       END DO GAUSS_PTS2
     ENDDO
 
-    ! UP-PU-Block(s)
+    ! UP-PU-PP-Block(s)
     ! Pressure-displacement mixed block
     !
     DO M = (ndofU+1),(ndofU+ndofP)
       GAUSS_PTS2: DO Ig = 1,nip
+        S_bulk = S_kk(Ig)/C_kkpp(Ig);
+        K_bulk = C_kkpp(Ig)/three;
+        Rm(M) = Rm(M) + (S_bulk - press(Ig)/K_bulk)*Ni_p(M,Ig)*det(Ig)*weights(Ig);
+
+
+        ! UP-PU Blocks
+        DO s = 1,nst; CALL VOIGHT_ITERATOR(s,I,J,nst)
+          Km(:,M) = Km(:,M) + PK2*dE(s,M,Ig)*Ni_p(M,Ig)*det(Ig)*weights(Ig);
+          Km(M,:) = Km(M,:) + PK2*dE(s,M,Ig)*Ni_p(M,Ig)*det(Ig)*weights(Ig);
+        ENDDO
+
         DO s = 1,nst; CALL VOIGHT_ITERATOR(s,I,J,nst)
           DO t = 1,nst; CALL VOIGHT_ITERATOR(t,K,L,nst)
             Ctang = C_ijkl(s,t,Ig) - two* press(Ig)*CdefInv(K,I,Ig)*CdefInv(J,L,Ig)
             Ctang = Ctang - C_kkpp(Ig)*Kdelta(I,J)*Kdelta(K,L)/three;
-
-S_bulk = S_kk(Ig)*
-K_bulk
-
-
           PK2 = S_ij(s,Ig) + press(Ig)*CdefInv(I,J,Ig) - S_kk(Ig)*Kdelta(I,J)/three;
           Rm(M) = Rm(M) + dE(s,M,Ig)*PK2*det(Ig)*weights(Ig);
           Km(M,:) = Km(M,:) + PK2*d2E(s,:,M,Ig)*det(Ig)*weights(Ig);
-
-
             Km(M,:) = Km(M,:) + dE(s,M,Ig)*Ctang*dE(t,:,Ig)*det(Ig)*weights(Ig);
           ENDDO
         ENDDO
+
+
       END DO GAUSS_PTS2
     ENDDO
 
 
 !  INTEGER,  INTENT(IN)   :: nprop, ntots, ndim, nst;
 !  INTEGER,  INTENT(IN)   :: nip, nodU, nodp, ndofU, ndofP
-
-    ! PP-Block
-    ! Pure pressure block
-    !
-    DO M = 1,ndofU
-      GAUSS_PTS2: DO Ig = 1,nip
-        DO s = 1,nst; CALL VOIGHT_ITERATOR(s,I,J,nst)
-          PK2 = S_ij(s,Ig) + press(Ig)*CdefInv(I,J,Ig) - S_kk(Ig)*Kdelta(I,J)/three;
-          Rm(M) = Rm(M) + dE(s,M,Ig)*PK2*det(Ig)*weights(Ig);
-          Km(M,:) = Km(M,:) + PK2*d2E(s,:,M,Ig)*det(Ig)*weights(Ig);
-
-          DO t = 1,nst; CALL VOIGHT_ITERATOR(t,K,L,nst)
-            Ctang = C_ijkl(s,t,Ig) - two* press(Ig)*CdefInv(K,I,Ig)*CdefInv(J,L,Ig)
-            Ctang = Ctang - C_kkpp(Ig)*Kdelta(I,J)*Kdelta(K,L)/three;
-            Km(M,:) = Km(M,:) + dE(s,M,Ig)*Ctang*dE(t,:,Ig)*det(Ig)*weights(Ig);
-          ENDDO
-        ENDDO
-      END DO GAUSS_PTS2
-    ENDDO
-
 
   ENDDO ELEMENTS
   RETURN
