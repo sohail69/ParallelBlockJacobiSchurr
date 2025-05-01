@@ -26,6 +26,7 @@ SUBROUTINE SOLID_UAS_ELM(Km, Rm, utemp, gama, fibre, MATPROP   &
   Fdef   = zero;    Fedef  = zero;    dE  = zero;    d2E = zero;    
   Jac    = zero;    Jacinv = zero;    det = zero;
 
+
   !-----
   ! Calculate the stress,
   ! tangent-stiffness and
@@ -162,6 +163,18 @@ SUBROUTINE MATMOD_NOH(C_ijkl,S_ij,Matprops,Fdef,ndim,nst,nprop)
    RETURN
 ENDSUBROUTINE MATMOD_NOH
 
+
+!-------------------------------
+! Kroneckecker delta function
+!-------------------------------
+PURE FUNCTION Kdelta(i,j) RESULT(Kd)
+   INTEGER, INTENT(IN) :: i,j;
+   REAL(iwp)           :: Kd;
+   IF(i == j)THEN; Kd = 1._iwp;
+   ELSE;           Kd = 0._iwp;
+   ENDIF
+END FUNCTION Kdelta
+
 !-------------------------------
 ! Voight iterator to tensor notation
 !-------------------------------
@@ -198,6 +211,70 @@ SUBROUTINE VOIGHT_ITERATOR(k, i, j, nst)
    ENDIF
    RETURN
 ENDSUBROUTINE VOIGHT_ITERATOR
+
+!-------------------------------------
+!  Determinant for small Matrices
+!-------------------------------------
+PURE FUNCTION DETERMINANT(Amat) RESULT(det)
+  IMPLICIT NONE
+  REAL(iwp), INTENT(IN) :: Amat(:,:)
+  REAL(iwp)             :: det
+  INTEGER               :: I
+  I   = UBOUND(Amat,1)
+  det = Amat(1,1)
+  IF(I == 2) det = DETERMINANT2(Amat) 
+  IF(I == 3) det = DETERMINANT3(Amat)
+ENDFUNCTION DETERMINANT
+
+
+PURE FUNCTION DETERMINANT2(Amat) RESULT(det)
+  IMPLICIT NONE
+  REAL(iwp), INTENT(IN) :: Amat(2,2)
+  REAL(iwp)             :: det
+
+  det = 0._iwp
+  det = Amat(1,1)*Amat(2,2) - Amat(1,2)*Amat(2,1)
+ENDFUNCTION DETERMINANT2
+
+PURE FUNCTION DETERMINANT3(Amat) RESULT(det)
+  IMPLICIT NONE
+  REAL(iwp), INTENT(IN) :: Amat(3,3)
+  REAL(iwp)             :: det
+
+  det = 0._iwp
+  det = det + Amat(1,1)*DETERMINANT2(Amat( (/2,3/), (/2,3/) ))
+  det = det - Amat(1,2)*DETERMINANT2(Amat( (/2,3/), (/1,3/) ))
+  det = det + Amat(1,3)*DETERMINANT2(Amat( (/2,3/), (/1,2/) ))
+ENDFUNCTION DETERMINANT3
+
+!-------------------------------------
+!  Inverts small matrices using Gaussian elimination
+!-------------------------------------
+SUBROUTINE Invert2(MatA, MatAinv, n)
+  IMPLICIT NONE
+  INTEGER                 :: i, j;
+  INTEGER,   INTENT(IN)   :: n
+  REAL(iwp), INTENT(IN)   :: MatA(n,n);
+  REAL(iwp), INTENT(INOUT):: MatAinv(n,n);
+  REAL(iwp)               :: con
+  REAL(iwp)               :: det;
+  REAL(iwp), PARAMETER    :: one = 1._iwp, zero = 0._iwp;
+
+  MatAinv = MatA;
+  DO i = 1,n
+    con = MatAinv(i,i);
+    MatAinv(i,i) = one;
+    MatAinv(i,:) = MatAinv(i,:)/con
+    DO j = 1,n
+      IF(i /= j)THEN
+        con = MatAinv(j,i)
+        MatAinv(j,i) = zero;
+        MatAinv(j,:) =  MatAinv(j,:) - MatAinv(i,:)*con;
+      ENDIF
+    ENDDO
+  ENDDO
+  RETURN
+END SUBROUTINE Invert2
 
 !-------------------------------------
 !  SDF map

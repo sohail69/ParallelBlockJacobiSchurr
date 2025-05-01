@@ -9,9 +9,8 @@ MODULE Solids_UPAS
 ! Total Lagrangian pressure-displacement-formulation (Active Strain)
 !-------------------------------
 SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
-                                  , coord, dNi_p, Ni_p, dNi_u, Ni_u, weights &
-                                  , nprop, ntots, ndofU, ndofP, ndim , nst   &
-                                  , nip, nodU, nodp)
+                                  , coord, Ni_p, dNi_u, Ni_u, weights, nprop &
+                                  , ntots, ndofU, ndofP, ndim , nst, nip, nodU, nodp)
   IMPLICIT NONE
   INTEGER                :: Iel, Ig, i, j, k, l, p, q, m, n, o, s, t;
   INTEGER,  INTENT(IN)   :: nprop, ntots, ndim, nst;
@@ -19,12 +18,12 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
   REAL(iwp),INTENT(IN)   :: astrain(nodU,nel_pp), fibre(ndim,ndim,nel_pp);
   REAL(iwp),INTENT(IN)   :: utemp(ntots,nel_pp), MATPROP(nprop);
   REAL(iwp),INTENT(IN)   :: coord(nodU,ndim,nel_pp), weights(nip)
-  REAL(iwp),INTENT(IN)   :: dNi_p(ndim,nodP,nip), Ni_p(nodP,nip)
-  REAL(iwp),INTENT(IN)   :: dNi_u(ndim,nodU,nip), Ni_u(nodU,nip)
+  REAL(iwp),INTENT(IN)   :: dNi_u(ndim,nodU,nip), Ni_u(nodU,nip), Ni_p(nodP,nip)
   REAL(iwp),INTENT(INOUT):: Km(ntots,ntots,nel_pp), Rm(ntots,nel_pp);
   REAL(iwp),PARAMETER    :: zero = 0._iwp, one = 1._iwp, two = 2._iwp, three=3._iwp;
 
   !Deformation related terms
+  REAL(iwp):: Jac(ndim,ndim), Jacinv(ndim,ndim), det(nip);
   REAL(iwp):: PK2, Ctang, S_bulk, K_bulk
   REAL(iwp):: S_kk(nip), C_kkpp(nip), auxm(ndim,nodU), pxm(nodP)
   REAL(iwp):: C_ijkl(nst,nst,nip), S_ij(nst,nip), CdefInv(ndim,ndim,nip)
@@ -34,14 +33,11 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
   REAL(iwp):: dE(nst,ndofU,nip), d2E(nst,ndofU,ndofU,nip);
   INTEGER  :: Map(ndim+1,nodU);
 
-  !Shape function and derivatives
-  REAL(iwp):: Jac(ndim,ndim), Jacinv(ndim,ndim), det(nip);
-
   Km     = zero;  Rm      = zero;
-  C_ijkl = zero;  S_ij    = zero;   Fedef  = zero;
   dE     = zero;  d2E     = zero;
-  Jac    = zero;  Jacinv  = zero;   det    = zero;
   Cdef   = zero;  CdefInv = zero;   Fdef   = zero;
+  C_ijkl = zero;  S_ij    = zero;   Fedef  = zero;
+  Jac    = zero;  Jacinv  = zero;   det    = zero;
 
   !===
   !
@@ -68,28 +64,23 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       CALL Invert2(Jac, Jacinv, nDIM)
       det(Ig) = DETERMINANT(Jac)
 
-      ! Calculate the active strain
-      ! components of the tensors
+      ! Calculate the active strain and the
+      ! displacement components of the def-tensors
+      Fdef = zero;
       strain = DOT_PRODUCT(Ni_p(:,Ig),  astrain(1:nodP,Iel) )
       gamma_f = -strain;
       gamma_n =  4._iwp*gamma_f;
       gamma_s = (one/((one + gamma_f)*(one + gamma_n))) - one;
       DO i = 1,ndim
         DO j = 1,ndim
+          Fdef(I,J) = Fdef(I,J) + DOT_PRODUCT(dNi_u(J,:,Ig),auxm(I,:));
+          IF(I==J) Fdef(I,J) = Fdef(I,J) + one;
           F0def(i,j) = Kdelta(i,j) + gamma_f*fibre(i,1,Iel)*fibre(j,1,Iel)
           IF(ndim > 1) F0def(i,j) = F0def(i,j) + gamma_s*fibre(i,2,Iel)*fibre(j,2,Iel)
           IF(ndim > 2) F0def(i,j) = F0def(i,j) + gamma_n*fibre(i,3,Iel)*fibre(j,3,Iel)
         ENDDO
-      ENDDO GAUSS_PTS1
+      ENDDO
       CALL INVERT2(F0def,F0inv,ndim)
-
-      ! Calculate the standard
-      ! displacement component
-      Fdef = zero;
-      DO I = 1,ndim; DO J = 1,ndim
-        Fdef(I,J) = Fdef(I,J) + DOT_PRODUCT(dNi_u(J,:,Ig),auxm(I,:));
-        IF(I==J) Fdef(I,J) = Fdef(I,J) + one;
-      ENDDO; ENDDO
 
       ! Calculate the stress, stiffness
       ! and strain measures/derivatives
@@ -111,7 +102,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       !Calculating the pressure
       !at the Gauss points
       press(Ig) = DOT_PRODUCT(Ni_p(:,Ig),pxm)
-    ENDDO
+    ENDDO GAUSS_PTS1
 
     !-----
     ! Integrate the residuals
@@ -139,7 +130,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
     ! Pressure-displacement mixed block
     !
     DO M = (ndofU+1),(ndofU+ndofP)
-      GAUSS_PTS2: DO Ig = 1,nip
+      GAUSS_PTS3:DO Ig = 1,nip
         S_bulk = S_kk(Ig)/C_kkpp(Ig);
         K_bulk = C_kkpp(Ig)/three;
         Rm(M,Iel) = Rm(M,Iel) + (S_bulk - press(Ig)/K_bulk)*Ni_p(M,Ig)*det(Ig)*weights(Ig);
@@ -155,7 +146,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
         p = (ndofU+1);
         q = (ndofU+ndofP);
         Km(p:q,M,Iel) = Km(p:q,M,Iel) - (one/K_bulk)*Ni_p(M,Ig)*Ni_p(:,Ig)*det(Ig)*weights(Ig);
-      END DO GAUSS_PTS2
+      END DO GAUSS_PTS3
     ENDDO
   ENDDO ELEMENTS
   RETURN
