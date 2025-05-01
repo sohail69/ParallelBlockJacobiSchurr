@@ -252,24 +252,13 @@ SUBROUTINE LinearSolve(A_mat, M_mat, x_vec, b_vec, NodalMask  &
                               , nodof, nel_pp, neqs_pp, nn_pp, ltol, limit  &
                               , iters, error, precon)
 
-    CASE(2) !Stabilised Hybrid Bi-Conjugate polynomial gradient(l) method
-      CALL SolveLinearSystem_BICGSTABL(A_mat, x_vec, b_vec, NodalMask, ntots, nod &
-                                     , nodof, nel_pp, neqs_pp, nn_pp, ltol, limit &
-                                     , iters, ell, error)
-
-    CASE(3) !Stabilised Bi-Conjugate method
-      CALL SolveLinearSystem_BICGSTAB(A_mat, x_vec, b_vec  &
-                                   , NodalMask, gg_colour, ncolours, ntots, nod  &
-                                   , nodof, nel_pp, neqs_pp, nn_pp, ltol, limit  &
-                                   , iters, ell, error, precon)
-
-    CASE(4) !Restarted Generalised minimum residual method Variant 1 Full GMRES
+    CASE(2) !Restarted Generalised minimum residual method Variant 1 Full GMRES
       CALL SolveLinearSystem_GMRESR(A_mat, M_mat, x_vec, b_vec  &
                                    , NodalMask, gg_colour, ncolours, ntots, nod  &
                                    , nodof, nel_pp, neqs_pp, nn_pp, ltol, limit  &
                                    , iters, ell, error, precon, 0)
 
-    CASE(5) !Restarted Generalised minimum residual method Variant 2 DQGMRES
+    CASE(3) !Restarted Generalised minimum residual method Variant 2 DQGMRES
       CALL SolveLinearSystem_GMRESR(A_mat, M_mat, x_vec, b_vec  &
                                    , NodalMask, gg_colour, ncolours, ntots, nod  &
                                    , nodof, nel_pp, neqs_pp, nn_pp, ltol, limit  &
@@ -381,7 +370,7 @@ SUBROUTINE DOT_PRODUCT_pp(dproduct, u_pp, v_pp, neqs_pp)
 END SUBROUTINE DOT_PRODUCT_pp
 
 !-------------------------------
-! Vector divided by scalar
+! Vector multiplied by scalar
 !-------------------------------
 SUBROUTINE Scalar_Vector_Product(unew, a, uold, n_pp)
   USE precision;
@@ -393,20 +382,6 @@ SUBROUTINE Scalar_Vector_Product(unew, a, uold, n_pp)
   unew = a*uold;
   RETURN
 END SUBROUTINE Scalar_Vector_Product
-
-!-------------------------------
-! Copies a vector to another vector
-!-------------------------------
-SUBROUTINE Copy_Vector(unew, uold, n_pp)
-  USE precision;
-  IMPLICIT NONE
-  INTEGER,   INTENT(IN)   :: n_pp;
-  REAL(iwp), INTENT(IN)   :: uold(n_pp);
-  REAL(iwp), INTENT(INOUT):: unew(n_pp);
-
-  unew = uold
-  RETURN
-END SUBROUTINE Copy_Vector
 
 !-------------------------------
 ! Parallel vector 2-norm
@@ -766,11 +741,11 @@ END SUBROUTINE HEAT_Integration
 ! Solid mechanics element Residual-Jacobian Integration
 ! for Displacement-Pressure element
 !-------------------------------
-SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp     &
-                           , coord, gg_pp, gg_Face, val_pp, Stress &
-                           , MATPROP, nel_pp, ntots, ndim, nst, nip,nodMax  &
-                           , nodof, nFace, nodFace, nipFace, nloadedFace    &
-                           , nr, nprop, material, element)
+SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, coord &
+                           , gg_pp, gg_Face, val_pp, Stress, MATPROP     &
+                           , nel_pp, ntots, ndim, nst, nip,nodMax, nodof &
+                           , nFace, nodFace, nipFace, nloadedFace, nr    &
+                           , nprop, element)
   USE precision;
   USE new_library;
   USE Solids_UPAS;
@@ -781,18 +756,16 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp     &
   IMPLICIT NONE
   INTEGER                     :: iel, i, j, k, l, m, n, igauss, nip2, nip3;
   CHARACTER(LEN=15),INTENT(IN):: element;
-  INTEGER,          INTENT(IN):: nprop, material, nodMax;
-  INTEGER,          INTENT(IN):: nel_pp, ntots, ndim, nst, nip, nodof;
+  INTEGER,          INTENT(IN):: nprop, nodMax, nel_pp, ntots, ndim, nst, nip, nodof;
   INTEGER,          INTENT(IN):: nFace, nodFace, nipFace, nloadedFace, nr;
-  INTEGER,          INTENT(IN):: gg_pp(ndim*nodMax,nel_pp)
-  INTEGER,          INTENT(IN):: gg_Face(nFace+1,nel_pp);
-  REAL(iwp),        INTENT(IN):: MATPROP(nprop), utemp(ntots,nel_pp)
+  INTEGER,          INTENT(IN):: gg_pp(ndim*nodMax,nel_pp), gg_Face(nFace+1,nel_pp);
+  REAL(iwp),        INTENT(IN):: MATPROP(nprop), utemp(ntots,nel_pp), astrain(nodMax,nel_pp)
   REAL(iwp),        INTENT(IN):: val_pp(ndim*nodMax,nel_pp), coord(nodMax,ndim,nel_pp);
-  REAL(iwp),        INTENT(IN):: Stress(nst*nodFace,nloadedFace);
-  REAL(iwp),     INTENT(INOUT):: Residual(ntots,nel_pp)
-  REAL(iwp),     INTENT(INOUT):: StoreKE(ntots,ntots,nel_pp);
+  REAL(iwp),        INTENT(IN):: Stress(nst*nodFace,nloadedFace), fibre(ndim,ndim,nel_pp);
+  REAL(iwp),     INTENT(INOUT):: Residual(ntots,nel_pp), StoreKE(ntots,ntots,nel_pp);
   REAL(iwp),         PARAMETER:: one = 1._iwp, zero = 0._iwp;
   REAL(iwp),       ALLOCATABLE:: centre(:), points(:,:), weights(:);   !Full integration
+  REAL(iwp),       ALLOCATABLE:: dNi_u(ndim,nodU,nip), Ni_u(nodU,nip), Ni_p(nodP,nip)
   INTEGER                     :: ndofU, ndofP, nodU, nodP, nodofP, nodofU;
   REAL(iwp)                   :: cx, cy, cr, ctol, rad0, rad1; !Rotation test
 
@@ -817,7 +790,7 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp     &
   !Array allocations
   !---
   ALLOCATE(centre(ndim), points(nip,ndim), weights(nip))
-
+  ALLOCATE(dNi_u(ndim,nodU,nip), Ni_u(nodU,nip), Ni_p(nodP,nip))
 
   !---
   !Numerical Integration and element mapping routines
@@ -827,9 +800,9 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp     &
   !---
   ! Element integration routines
   !---
-  CALL STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
-                              , coord, Ni_p, dNi_u, Ni_u, weights, nprop &
-                              , ntots, ndofU, ndofP, ndim , nst, nip, nodU, nodp)
+  CALL STATIC_SOLIDUPAS_ELEMENT(StoreKE, Residual, utemp, astrain, fibre, MATPROP &
+                              , coord, Ni_p, dNi_u, Ni_u, weights, nprop, ntots   &
+                              , ndofU, ndofP, ndim , nst, nip, nodU, nodp)
 
   !--
   !Apply Traction boundary conditions using surface elements
@@ -858,6 +831,7 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp     &
 
 
   DEALLOCATE(points, weights, centre)
+  DEALLOCATE(dNi_u, Ni_u, Ni_p)
   RETURN
 END SUBROUTINE SOLID_Integration_UP
 

@@ -23,5 +23,5 @@ mpif90 -o BJSTest1    test/BlockJacobiPreconTest1.f90 -fallow-argument-mismatch 
                                                        src/BlockJacobiPrecon.o
 
 mpif90 -o HierElmTest test/HierElmTest.f90            -I src/                  \
-                                                      src/Solids_pFEM_UAS.o    \
+                                                      ref_elements/Solids_UAS.o    \
                                                       src/TensorElement.o -llapack -lblas

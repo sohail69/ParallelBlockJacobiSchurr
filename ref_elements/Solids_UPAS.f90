@@ -1,6 +1,5 @@
 MODULE Solids_UPAS
   USE precision;
-  USE new_library;
   USE Parallel_supplementary_Maths;
   CONTAINS
 
@@ -10,11 +9,12 @@ MODULE Solids_UPAS
 !-------------------------------
 SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
                                   , coord, Ni_p, dNi_u, Ni_u, weights, nprop &
-                                  , ntots, ndofU, ndofP, ndim , nst, nip, nodU, nodp)
+                                  , nel_pp, ntots, ndofU, ndofP, ndim , nst  &
+                                  , nip, nodU, nodp)
   IMPLICIT NONE
   INTEGER                :: Iel, Ig, i, j, k, l, p, q, m, n, o, s, t;
   INTEGER,  INTENT(IN)   :: nprop, ntots, ndim, nst;
-  INTEGER,  INTENT(IN)   :: nip, nodU, nodp, ndofU, ndofP
+  INTEGER,  INTENT(IN)   :: nip, nodU, nodp, ndofU, ndofP, nel_pp
   REAL(iwp),INTENT(IN)   :: astrain(nodU,nel_pp), fibre(ndim,ndim,nel_pp);
   REAL(iwp),INTENT(IN)   :: utemp(ntots,nel_pp), MATPROP(nprop);
   REAL(iwp),INTENT(IN)   :: coord(nodU,ndim,nel_pp), weights(nip)
@@ -29,12 +29,10 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
   REAL(iwp):: C_ijkl(nst,nst,nip), S_ij(nst,nip), CdefInv(ndim,ndim,nip)
   REAL(iwp):: strain, gamma_f, gamma_n, gamma_s, press(nip);
   REAL(iwp):: Fdef(ndim,ndim), Fedef(ndim,ndim), F0def(ndim,ndim);
-  REAL(iwp):: Cdef(ndim,ndim), F0inv(ndim,ndim);
-  REAL(iwp):: dE(nst,ndofU,nip), d2E(nst,ndofU,ndofU,nip);
+  REAL(iwp):: Cdef(ndim,ndim), F0inv(ndim,ndim), dE(nst,ndofU,nip), d2E(nst,ndofU,ndofU,nip);
   INTEGER  :: Map(ndim+1,nodU);
 
-  Km     = zero;  Rm      = zero;
-  dE     = zero;  d2E     = zero;
+  Km     = zero;  Rm      = zero;   dE     = zero;  d2E     = zero;
   Cdef   = zero;  CdefInv = zero;   Fdef   = zero;
   C_ijkl = zero;  S_ij    = zero;   Fedef  = zero;
   Jac    = zero;  Jacinv  = zero;   det    = zero;
@@ -44,6 +42,8 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
   ! Integrate all the elements
   !
   !====
+
+  !$PRAGMA OMP 
   ELEMENTS:DO Iel = 1, nel_pp
     !-----
     ! Calculate the stress,
@@ -60,7 +60,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
     GAUSS_PTS1: DO Ig = 1,nip
       ! Calculate the coordinate
       ! tranform from ref-to-physical
-      Jac = MATMUL(dNi(:,:,Ig), coord(:,:,Iel))
+      Jac = MATMUL(dNi_u(:,:,Ig), coord(:,:,Iel))
       CALL Invert2(Jac, Jacinv, nDIM)
       det(Ig) = DETERMINANT(Jac)
 
@@ -85,9 +85,9 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       ! Calculate the stress, stiffness
       ! and strain measures/derivatives
       Fedef = MATMUL(Fdef,F0Inv)
-      CALL GREENLAGRANGE_DERIVATIVES_AS(Fdef,F0Inv,dNi,dE(:,:,Ig),d2E(:,:,:,Ig),Map(1:ndim,:),ndim,ndofU,nodU,nst)
+      CALL GREENLAGRANGE_DERIVS_AS(Fdef,F0Inv,dNi_u,dE(:,:,Ig),d2E(:,:,:,Ig),Map(1:ndim,:),ndim,ndofU,nodU,nst)
       CALL INVERT2(Cdef,CdefInv(:,:,Ig),ndim); 
-      CALL MATMOD_NOH(C_ijkl(:,:,Ig),S_ij(:,Ig),Matprops,Fdef,ndim,nst,nprop)
+      CALL MATMOD_NOH(C_ijkl(:,:,Ig),S_ij(:,Ig),MATPROP,Fdef,ndim,nst,nprop)
 
       ! Calculate the volumetric stress
       ! and the Bulk stiffness at the
@@ -135,7 +135,6 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
         K_bulk = C_kkpp(Ig)/three;
         Rm(M,Iel) = Rm(M,Iel) + (S_bulk - press(Ig)/K_bulk)*Ni_p(M,Ig)*det(Ig)*weights(Ig);
 
-
         ! UP-PU Blocks
         DO s = 1,nst; CALL VOIGHT_ITERATOR(s,I,J,nst)
           Km(1:ndofU,M,Iel) = Km(1:ndofU,M,Iel) + CdefInv(I,J,Ig)*dE(s,:,Ig)*Ni_p(M,Ig)*det(Ig)*weights(Ig);
@@ -155,7 +154,7 @@ END SUBROUTINE STATIC_SOLIDUPAS_ELEMENT
 !-----------------
 ! Green-Lagrange-strain derivatives Active strain Variant
 !-----------------
-SUBROUTINE GREENLAGRANGE_DERIVATIVES_AS(Fdef,F0Inv,dNi,dE,d2E,Map,ndim,ntots,nod,nst)
+SUBROUTINE GREENLAGRANGE_DERIVS_AS(Fdef,F0Inv,dNi,dE,d2E,Map,ndim,ntots,nod,nst)
   IMPLICIT NONE
   INTEGER                :: i, j, k, l, p, q, r, m, n;
   INTEGER,   INTENT(IN)   :: nod, ntots, ndim, nst;
@@ -186,7 +185,7 @@ SUBROUTINE GREENLAGRANGE_DERIVATIVES_AS(Fdef,F0Inv,dNi,dE,d2E,Map,ndim,ntots,nod
     IF(I/=J) d2E(m,:,:) = 2._iwp*d2E(m,:,:);
   ENDDO
   RETURN
-ENDSUBROUTINE GREENLAGRANGE_DERIVATIVES_AS
+ENDSUBROUTINE GREENLAGRANGE_DERIVS_AS
 
 
 !-------------------------------

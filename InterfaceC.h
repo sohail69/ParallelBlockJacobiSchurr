@@ -93,18 +93,10 @@ extern "C"{
 
   //Increment vector
   void increment_(double* unew, double* uold, double* du, int *n_pp);
-  void increment2_(double* unew,double* uold,double* du,double *a,double *b,int *n_pp);
   void dot_product_pp_(double *dproduct, double* u_pp, double* v_pp, int *n_pp);
-
-
-  //Decrement vector
-  void decrement_(double* unew, double* uold, double* du, int *n_pp);
 
   //Scalar divides a Vector
   void scalar_vector_product_(double* unew,double *a,double* uold,int *n_pp);
-
-  //Copies one vector to another
-  void copy_vector_(double* unew, double* uold, int *n_pp);
 
   //Calculate Vector 2-Norm
   void norm_pp_(double *twonorm, double* u_pp, int *neqs_pp);
@@ -171,7 +163,6 @@ extern "C"{
 
   //Error stop condition
   void stop_cond_pp_(int *IsConverged, double *error, double *rtol);
-  
 
   //--------------------------------------------------------------------
   // Static displacement-element Solid mechanics 
@@ -192,8 +183,8 @@ extern "C"{
   // Static displacement-pressure mixed-element Solid mechanics 
   //--------------------------------------------------------------------
   //Solid-mechanics element integration Jacobian-residual
-  void solid_integration_up_(double* Residual, double* StoreKE
-                        , double* utemp, double* coord
+  void solid_integration_up_(double* Residual, double* StoreKE, double* utemp
+                        , double* astrain, double* fibre, double* coord
                         , int* gg_pp, int* gg_Face, double* val_pp, double* Stress
                         , double* MATPROP, int *nel_pp, int *ntots, int *ndim
                         , int *nst, int *nip, int *nod, int *nodof, int *nFace
@@ -263,30 +254,4 @@ extern "C"{
   void wtime_(double *time);
 };
 #endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
