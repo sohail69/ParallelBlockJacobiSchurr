@@ -782,7 +782,6 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   ndofU=nodofU*nodU
   ndofP=nodofP*nodP
 
-
   !---
   !Array allocations
   !---
@@ -793,6 +792,11 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   !Numerical Integration and element mapping routines
   !---
   CALL SAMPLE2(element, points, weights)
+  DO I = 1,nip
+    CALL SHAPE_FUN_HEX27(Ni_u(:,I),points,I)
+    CALL SHAPE_DER_HEX27(dNi_u(:,:,I),points,I)
+    CALL SHAPE_FUN(Ni_p(:,I),points,I)
+  ENDDO
 
   !---
   ! Element integration routines
@@ -800,11 +804,6 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   CALL STATIC_SOLIDUPAS_ELEMENT(StoreKE, Residual, utemp, astrain, fibre, MATPROP &
                               , coord, Ni_p, dNi_u, Ni_u, weights, nprop, nel_pp  &
                               , ntots, ndofU, ndofP, ndim , nst, nip, nodU, nodp)
-
-!SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
-!                                  , coord, Ni_p, dNi_u, Ni_u, weights, nprop &
-!                                  , nel_pp, ntots, ndofU, ndofP, ndim , nst  &
-!                                  , nip, nodU, nodp)
 
   !--
   !Apply Traction boundary conditions using surface elements
@@ -830,7 +829,6 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
       ENDDO
     ENDDO
   ENDDO
-
 
   DEALLOCATE(points, weights, centre)
   DEALLOCATE(dNi_u, Ni_u, Ni_p)

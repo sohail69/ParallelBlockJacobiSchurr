@@ -48,3 +48,4 @@ mpif90 -o main_SolidsUPAS main_SolidsUPAS.o -fallow-argument-mismatch  \
                                             ref_elements/Solids_UPAS.o              \
                                             $PARAFEM_DIR/lib/libParaFEM_mpi.5.0.3.a \
                                             -lgfortran -lstdc++
+rm -r *.o

@@ -192,7 +192,6 @@ extern "C"{
                         , int *np_types, int *nprop, int *material
                         , char element[15]);
 
-
   //--------------------------------------------------------------------
   // ALE Orthotropic Heat equation related functions
   //--------------------------------------------------------------------
