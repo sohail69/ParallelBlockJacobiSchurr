@@ -12,16 +12,39 @@ clear
 cd src
 sh ./compile.bash
 cd ..
-rm -r BJSTest0 BJSTest1
+cd ref_elements
+sh ./compile.bash
+cd ..
+rm -r main_SolidsUPAS
 
-mpif90 -o BJSTest0    test/BlockJacobiPreconTest0.f90 -fallow-argument-mismatch \
-                                                      -I src/                   \
-                                                       src/BlockJacobiPrecon.o
+#
+# Compile the C++ files
+#
+export PARAFEM_DIR="/home/sar-local/X_Software/parafem/"
+mpicxx -std=c++11 -O3 -m64 -c main_SolidsUPAS.cpp
 
-mpif90 -o BJSTest1    test/BlockJacobiPreconTest1.f90 -fallow-argument-mismatch \
-                                                      -I src/                   \
-                                                       src/BlockJacobiPrecon.o
+#
+# Compile the fortran Interface(s)
+#
+mpif90 -c InterfaceF.f90        -fallow-argument-mismatch   \
+                                -I src/                     \
+                                -I ref_elements/            \
+                                -I $PARAFEM_DIR/include/mpi
 
-mpif90 -o HierElmTest test/HierElmTest.f90            -I src/                  \
-                                                      ref_elements/Solids_UAS.o    \
-                                                      src/TensorElement.o -llapack -lblas
+#
+# Make the executables
+#
+mpif90 -o main_SolidsUPAS main_SolidsUPAS.o -fallow-argument-mismatch  \
+                                            -I src/                    \
+                                           -I $PARAFEM_DIR/include/mpi \
+                                            InterfaceF.o               \
+                                            src/Parallel_IO.o                       \
+                                            src/Parallel_supplementary_Maths.o      \
+                                            src/Parallel_ELEMENT_Colouring.o        \
+                                            src/Parallel_FEA_LinearSolvers.o        \
+                                            src/Parallel_BoundaryConditions.o       \
+                                            ref_elements/OrthoHeat_ALE.o            \
+                                            ref_elements/Solids_Traction.o          \
+                                            ref_elements/Solids_UPAS.o              \
+                                            $PARAFEM_DIR/lib/libParaFEM_mpi.5.0.3.a \
+                                            -lgfortran -lstdc++

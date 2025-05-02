@@ -92,7 +92,7 @@ extern "C"{
 
 
   //Increment vector
-  void increment_(double* unew, double* uold, double* du, int *n_pp);
+  void increment_(double* unew, double* uold, double* du, double *a, double *b, int *n_pp);
   void dot_product_pp_(double *dproduct, double* u_pp, double* v_pp, int *n_pp);
 
   //Scalar divides a Vector
@@ -214,7 +214,6 @@ extern "C"{
   void cisd_(int* CellID, int* StimDef, int* data_pp, int *dof
            , int *ndim, int *nn_pp);
 
-
   //Diffusion and Fibre orientation
   void fibre_diffusion_(double* Fibre, double* Diff, double* data_pp
                       , int *dof, int *ndim, int *nels_pp);
@@ -254,4 +253,3 @@ extern "C"{
   void wtime_(double *time);
 };
 #endif
-

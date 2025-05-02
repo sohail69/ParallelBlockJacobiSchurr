@@ -235,7 +235,6 @@ SUBROUTINE LinearSolve(A_mat, M_mat, x_vec, b_vec, NodalMask  &
   USE maths;          USE gather_scatter;    USE new_library;
   USE Parallel_supplementary_Maths;
   USE Parallel_FEA_LinearSolvers;
-  USE PRECONDITIONERS;
   IMPLICIT NONE
   INTEGER,   INTENT(INOUT):: iters;
   INTEGER,   INTENT(IN)   :: nodof, nod, nn_pp, ncolours, solver, precon;
@@ -741,18 +740,16 @@ END SUBROUTINE HEAT_Integration
 ! Solid mechanics element Residual-Jacobian Integration
 ! for Displacement-Pressure element
 !-------------------------------
-SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, coord &
-                           , gg_pp, gg_Face, val_pp, Stress, MATPROP     &
-                           , nel_pp, ntots, ndim, nst, nip,nodMax, nodof &
-                           , nFace, nodFace, nipFace, nloadedFace, nr    &
-                           , nprop, element)
+SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        &
+                           , coord , gg_pp, gg_Face, val_pp, Stress, MATPROP    &
+                           , nel_pp, ntots, ndim, nst, nip,nodMax, nodof, nFace &
+                           , nodFace, nipFace, nloadedFace, nr, nprop, element)
   USE precision;
   USE new_library;
   USE Solids_UPAS;
-  USE Static_SolidsTraction;
+  USE Solids_Traction;
   USE Parallel_BoundaryConditions;
   USE Parallel_supplementary_Maths;
-  USE PRECONDITIONERS;
   IMPLICIT NONE
   INTEGER                     :: iel, i, j, k, l, m, n, igauss, nip2, nip3;
   CHARACTER(LEN=15),INTENT(IN):: element;
@@ -765,7 +762,7 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, coord &
   REAL(iwp),     INTENT(INOUT):: Residual(ntots,nel_pp), StoreKE(ntots,ntots,nel_pp);
   REAL(iwp),         PARAMETER:: one = 1._iwp, zero = 0._iwp;
   REAL(iwp),       ALLOCATABLE:: centre(:), points(:,:), weights(:);   !Full integration
-  REAL(iwp),       ALLOCATABLE:: dNi_u(ndim,nodU,nip), Ni_u(nodU,nip), Ni_p(nodP,nip)
+  REAL(iwp),       ALLOCATABLE:: dNi_u(:,:,:), Ni_u(:,:), Ni_p(:,:)
   INTEGER                     :: ndofU, ndofP, nodU, nodP, nodofP, nodofU;
   REAL(iwp)                   :: cx, cy, cr, ctol, rad0, rad1; !Rotation test
 
@@ -801,8 +798,13 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, coord &
   ! Element integration routines
   !---
   CALL STATIC_SOLIDUPAS_ELEMENT(StoreKE, Residual, utemp, astrain, fibre, MATPROP &
-                              , coord, Ni_p, dNi_u, Ni_u, weights, nprop, ntots   &
-                              , ndofU, ndofP, ndim , nst, nip, nodU, nodp)
+                              , coord, Ni_p, dNi_u, Ni_u, weights, nprop, nel_pp  &
+                              , ntots, ndofU, ndofP, ndim , nst, nip, nodU, nodp)
+
+!SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
+!                                  , coord, Ni_p, dNi_u, Ni_u, weights, nprop &
+!                                  , nel_pp, ntots, ndofU, ndofP, ndim , nst  &
+!                                  , nip, nodU, nodp)
 
   !--
   !Apply Traction boundary conditions using surface elements

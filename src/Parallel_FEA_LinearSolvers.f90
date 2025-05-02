@@ -6,7 +6,6 @@ MODULE Parallel_FEA_LinearSolvers
 ! My own libraries
 !
   USE Parallel_supplementary_Maths;
-  USE PRECONDITIONERS
   CONTAINS
 
 SUBROUTINE STOP_COND(IsConverged, error, rtol)
@@ -41,15 +40,15 @@ END SUBROUTINE STOP_COND
     REAL(iwp), INTENT(IN)   :: A_mat(ntots,ntots,nel_pp), b_vec(neqs_pp), ltol;
     REAL(iwp), INTENT(INOUT):: x_vec(neqs_pp), error;
     REAL(iwp), PARAMETER    :: one = 1._iwp, zero = 0._iwp;
-    REAL(iwp), ALLOCATABLE  :: r_pp(:), p_pp(:), ap_pp(:), d_pp(:), diag_pp(:)
-    REAL(iwp), ALLOCATABLE  :: pmul(:,:), qmul(:,:), diag_tmp(:,:);
+    REAL(iwp), ALLOCATABLE  :: r_pp(:), p_pp(:), ap_pp(:), d_pp(:)
+    REAL(iwp), ALLOCATABLE  :: pmul(:,:), qmul(:,:)
     REAL(iwp)               :: alpha, beta, rho0, b_norm, rpap_norm;
 
     !-----
     ! Allocate and initialise arrays
     !-----
-    ALLOCATE(pmul(ntots,nel_pp), qmul(ntots,nel_pp), diag_tmp(ntots,nel_pp));
-    ALLOCATE(r_pp(neqs_pp), p_pp(neqs_pp), ap_pp(neqs_pp),d_pp(neqs_pp), diag_pp(neqs_pp))
+    ALLOCATE(pmul(ntots,nel_pp), qmul(ntots,nel_pp));
+    ALLOCATE(r_pp(neqs_pp), p_pp(neqs_pp), ap_pp(neqs_pp),d_pp(neqs_pp))
     pmul  = zero;
     qmul  = zero;
     r_pp  = zero;
@@ -58,17 +57,6 @@ END SUBROUTINE STOP_COND
     x_vec = zero;
     d_pp  = zero;
 
-    !-----
-    ! Build preconditioner
-    !-----
-    DO Iel = 1,nel_pp
-      DO I = 1,ntots
-        diag_tmp(I,Iel) = A_mat(I,I,Iel)
-      ENDDO
-    ENDDO
-    diag_pp = zero;
-    CALL SCATTERM(diag_pp,diag_tmp,NodalMASK,ntots,nodof,nod,nel_pp,neqs_pp,nn_pp)
-    diag_pp = one/diag_pp;
 
     !-----
     ! Initialise linear system
@@ -84,11 +72,9 @@ END SUBROUTINE STOP_COND
     CALL STOP_COND(IsConverged, error, ltol)
     IF(IsConverged /= 0)RETURN
 
-    IF(precon == 1)THEN !Only precondition if preconditioned
-        d_pp = r_pp*Diag_pp;
-    ELSE
-      d_pp = r_pp
-    ENDIF
+
+   !!!d_pp = M_Inv * r_pp;
+    d_pp = r_pp
     p_pp  = d_pp;
 
 IF(numpe==1) WRITE(*,*) "CG Solver started"
@@ -103,22 +89,18 @@ IF(numpe==1) WRITE(*,*) "CG Solver started"
                       ,nel_pp,nn_pp,neqs_pp,ntots,nod,nodof)
       !PARAMATVEC(A_mat, p_pp, ap_pp)
       rho0  = DOT_PRODUCT_P(d_pp,r_pp)
-	  rpap_norm = DOT_PRODUCT_P(p_pp,ap_pp)
+      rpap_norm = DOT_PRODUCT_P(p_pp,ap_pp)
       alpha = rho0/rpap_norm;
       x_vec = x_vec + alpha*p_pp
       r_pp  = r_pp - alpha*ap_pp
       error = norm_p(r_pp)
-	  error = error/b_norm
-      IF(precon == 1)THEN !Only precondition if preconditioned
-        d_pp = r_pp*Diag_pp;
-      ELSE
-        d_pp = r_pp
-      ENDIF
-
+      error = error/b_norm
+      !!!d_pp = M_Inv * r_pp;
+      d_pp = r_pp
       CALL STOP_COND(IsConverged, error, ltol)
       IF(IsConverged /= 0) EXIT ITERATIONS
       beta  = DOT_PRODUCT_P(r_pp,d_pp)
-	  beta  = beta/rho0
+      beta  = beta/rho0
       beta  = MAX(zero,beta)
       p_pp  = d_pp + beta*p_pp     
     ENDDO ITERATIONS
@@ -126,8 +108,8 @@ IF(numpe==1) WRITE(*,*) "CG Solver started"
     !-----
     ! Deallocate arrays and exit
     !-----
-    DEALLOCATE(pmul, qmul, diag_tmp);
-    DEALLOCATE(r_pp, p_pp, ap_pp, d_pp, Diag_pp);
+    DEALLOCATE(pmul, qmul);
+    DEALLOCATE(r_pp, p_pp, ap_pp, d_pp);
     RETURN
   END SUBROUTINE SolveLinearSystem_CG
 
@@ -138,7 +120,7 @@ IF(numpe==1) WRITE(*,*) "CG Solver started"
                                    ,ncolours, ntots, nod, nodof, nel_pp, neqs_pp &
                                    ,nn_pp,ltol,limit,iters,ell,error,precon,option)
     IMPLICIT NONE
-    INTEGER                 :: Iel, i, j, k, riters, m, n, order1, order2, IsConverged;
+    INTEGER                 :: Iel, i, j, k, riters, m, n, IsConverged;
     REAL(iwp)               :: BiCGerr;
     INTEGER,   INTENT(INOUT):: iters
     INTEGER,   INTENT(IN)   :: nodof, nod, nn_pp, ncolours, option, precon;
@@ -156,10 +138,6 @@ IF(numpe==1) WRITE(*,*) "CG Solver started"
 
 character(len=10) :: file_id
 
-    !Preconditioners
-    REAL(iwp), ALLOCATABLE  :: LowerC(:,:,:), UpperC(:,:,:), diagC_pp(:) !Coarse level
-    REAL(iwp), ALLOCATABLE  :: Lower(:,:,:), Upper(:,:,:), diag_pp(:)    !Fine level
-
     !-----
     ! Allocate and initialise Solver arrays
     !-----
@@ -173,29 +151,6 @@ character(len=10) :: file_id
     v_pp  = zero;    w_pp  = zero;
     x_pp  = zero;
     b_norm = norm_p(b_vec)
-
-    !-----
-    ! Allocate and preconditioner initialise arrays
-    !-----
-    IF(precon==4)THEN !p-Multigrid 2-level
-      ALLOCATE(Lower(ntots,ntots,nel_pp),Upper(ntots,ntots,nel_pp),Diag_pp(neqs_pp))
-      Lower   = zero;    Upper   = zero;    diag_pp  = zero;
-      CALL EBE_PRECONS(Lower,Upper,Diag_pp,A_mat,NodalMASK,ntots &
-                      ,nod,nodof,nel_pp,neqs_pp,nn_pp,precon)
-
-
-      ALLOCATE(LowerC(ntots,ntots,nel_pp), UpperC(ntots,ntots,nel_pp),DiagC_pp(neqs_pp))
-      LowerC  = zero;    UpperC  = zero;    diagC_pp = zero;
-      CALL EBE_PRECONS(LowerC,UpperC,DiagC_pp,M_mat,NodalMASK,ntots &
-                      ,nod,nodof,nel_pp,neqs_pp,nn_pp,precon)
-
-
-    ELSE
-      ALLOCATE(Lower(ntots,ntots,nel_pp),Upper(ntots,ntots,nel_pp),Diag_pp(neqs_pp))
-      Lower   = zero;    Upper   = zero;    diag_pp  = zero;
-      CALL EBE_PRECONS(Lower,Upper,Diag_pp,M_mat,NodalMASK,ntots &
-                      ,nod,nodof,nel_pp,neqs_pp,nn_pp,precon)
-    ENDIF
 
 write(file_id, '(i0)') precon
  IF(numpe==1)OPEN(43,FILE="Results2/LinearSolver"//trim(adjustl(file_id))//".dat",STATUS='REPLACE',ACTION='WRITE')
@@ -222,44 +177,12 @@ write(file_id, '(i0)') precon
         ! Flexible Preconditioned Arnoldi iterations
         !-----
 !==================================================================
-!-------------------------EBE-Preconditioners----------------------
-!------------------split preconditioner M = M1*M2------------------
+!---------------------------Preconditioner-------------------------
 !==================================================================
-           order1 = i/2;
-           order1 = i - 2*order1
-           IF(order1 /= 0) order2 = 1;
-           IF(order1 == 0) order2 = 0;
-
            z_pp(:,i) = v_pp(:,i);
-           IF(precon==1)THEN
-             z_pp(:,i) = z_pp(:,i)*Diag_pp;
-             z_pp(:,i) = z_pp(:,i)*Diag_pp;
-           ENDIF
-           IF(precon==2)THEN
-             z_pp(:,i) = z_pp(:,i)*Diag_pp
-             CALL APPLY_EBE_PRECON(Lower,z_pp(:,i),z_pp(:,i),gg_colour,NodalMASK &
-                                  ,ncolours,ntots,nodof,nod,nel_pp,neqs_pp, nn_pp,0)
-
-             CALL APPLY_EBE_PRECON(Upper,z_pp(:,i),z_pp(:,i),gg_colour,NodalMASK &
-                                  ,ncolours,ntots,nodof,nod,nel_pp,neqs_pp, nn_pp,1)
-
-           ENDIF
-           IF(precon==3)THEN
-             CALL APPLY_MS_PRECONR(Lower,Upper,A_mat,Diag_pp,z_pp(:,i),z_pp(:,i) &
-			                      ,gg_colour,NodalMASK,ncolours,ntots,nodof,nod  &
-                                  ,nel_pp,neqs_pp,nn_pp,0)
-           ENDIF
-           IF(precon==4)THEN
-             CALL APPLY_RAS_PRECONR(Lower,Upper,Diag_pp,A_mat,LowerC,UpperC,DiagC_pp,M_mat &
-			                       ,z_pp(:,i),z_pp(:,i),gg_colour,NodalMASK,ncolours,ntots &
-                                   ,nodof,nod,nel_pp,neqs_pp,nn_pp)
-           ENDIF
-
 
            CALL PARAMATVEC(A_mat,z_pp(:,i),w_pp,pmul,qmul,NodalMask &
                           ,nel_pp,nn_pp,neqs_pp,ntots,nod,nodof)
-
-						   
 !==================================================================
 !---------------------------Preconditioner-------------------------
 !==================================================================
@@ -346,8 +269,6 @@ write(file_id, '(i0)') precon
     DEALLOCATE(pmul, qmul, x_pp)
     DEALLOCATE(r0_pp, Hess, sn, cs)
     DEALLOCATE(w_pp, v_pp, z_pp, beta)
-    DEALLOCATE(Lower, Upper, diag_pp)
-    IF(precon==4) DEALLOCATE(LowerC, UpperC, diagC_pp)
     RETURN
   END SUBROUTINE SolveLinearSystem_GMRESR
 !-------------------------------

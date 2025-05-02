@@ -23,8 +23,6 @@ mpif90 -c Parallel_IO.f90                     -fallow-argument-mismatch  \
                                               -I $PARAFEM_DIR/include/mpi
 mpif90 -c Parallel_ELEMENT_Colouring.f90      -fallow-argument-mismatch  \
                                               -I $PARAFEM_DIR/include/mpi
-mpif90 -c Parallel_EBE_Preconditioners.f90    -fallow-argument-mismatch  \
-                                              -I $PARAFEM_DIR/include/mpi
 mpif90 -c Parallel_FEA_LinearSolvers.f90      -fallow-argument-mismatch  \
                                               -I $PARAFEM_DIR/include/mpi
 mpif90 -c Parallel_BoundaryConditions.f90     -fallow-argument-mismatch  \

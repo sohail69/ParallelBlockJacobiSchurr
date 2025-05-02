@@ -18,10 +18,18 @@ rm -r *".o" *".mod"
 ## Build the object Files
 ##
 export PARAFEM_DIR="/home/sar-local/X_Software/parafem/"
-#mpif90 -c Solids_UAS.f90  -fallow-argument-mismatch \
-#                          -I $PARAFEM_DIR/include/mpi \
-#                          -I ../src
+#mpif90 -c Solids_UAS.f90     -fallow-argument-mismatch \
+#                             -I $PARAFEM_DIR/include/mpi \
+#                             -I ../src
+mpif90 -c OrthoHeat_ALE.f90  -fallow-argument-mismatch \
+                             -I $PARAFEM_DIR/include/mpi \
+                             -I ../src
 
-mpif90 -c Solids_UPAS.f90 -fallow-argument-mismatch \
-                          -I $PARAFEM_DIR/include/mpi \
-                          -I ../src
+
+mpif90 -c Solids_UPAS.f90     -fallow-argument-mismatch \
+                              -I $PARAFEM_DIR/include/mpi \
+                              -I ../src
+
+mpif90 -c Solids_Traction.f90 -fallow-argument-mismatch \
+                              -I $PARAFEM_DIR/include/mpi \
+                              -I ../src

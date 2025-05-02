@@ -137,13 +137,11 @@ class Mesh{
                            , &nels_pp, &npes, &numpe);
     };
 
-
     //Read in Material Properties
     void Read_Materials(char FName[50], double* Matprops, Problem *prob){
       int nmat = 1;
       read_materialprops_(FName, &numpe, Matprops, &nmat, &np_types);
     };
-
 
     //Read in partitioned real data
     void Read_DataR(char FName[50], double* Data_pp, int dof, int n_pp){
@@ -219,25 +217,17 @@ class Mesh{
 
 
     //Increment a vector
-    void Increment(double* unew, double* uold, double* du, int n_pp){
-      increment_(unew, uold, du, &n_pp);
+    void Increment(double* unew, double* uold, double* du, double *a, double *b, int *n_pp){
+      increment_(unew, uold, du, a, b, n_pp);
     };
 
-    //Increment a vector
-    void Decrement(double* unew, double* uold, double* du, int n_pp){
-      decrement_(du, unew, uold, &n_pp);
-    };
 
     //Calculates a vector increment
     void Calc_increment(double* du, double a, double*  unew, double*  uold, int n_pp){
-      decrement_(unew, uold, du, &n_pp);
+      double one = 1.00, Mone = -1.00;
+      increment_(unew, uold, du, &one, &Mone, &n_pp);
       double aInv=1.0/a;
       scalar_vector_product_(du,  &aInv, du, &n_pp);
-    };
-
-    //Makes a Vector copy
-    void Copy_vector(double*  unew, double*  uold, int n_pp){
-      copy_vector_(unew, uold, &n_pp);
     };
 
     //Vector Norm
@@ -251,14 +241,14 @@ class Mesh{
       sum_pp_(total,partial);
     };
 
-     //Error stop condition
-	 bool IsItConverged(double *error, double *rtol){
-       bool ConvergenceTest;
-       int IsConverged=0;
-       stop_cond_pp_(&IsConverged,error,rtol);
-       ConvergenceTest = (IsConverged != 0);
-       return ConvergenceTest;
-     };
+    //Error stop condition
+    bool IsItConverged(double *error, double *rtol){
+      bool ConvergenceTest;
+      int IsConverged=0;
+      stop_cond_pp_(&IsConverged,error,rtol);
+      ConvergenceTest = (IsConverged != 0);
+      return ConvergenceTest;
+    };
 
 
     //Output data routines
@@ -465,23 +455,6 @@ class Solid_problemUP: public Problem{
     };
     virtual int return_LoadedFaces(){return nloadedFace;};
 
-    //LOR preconditioner
-    void Update_LOR_Precon(double* Km_pp,double* u_pp, double* F0Inv
-                         , double* Stress, MESH *mesh){
-      //Solid-mechanics element integration
-      double *utemp;
-      utemp = new double[ntots*nels_pp];
-      mesh->GATHER(u_pp, utemp, this);
-      solid_integration_uplor_(Km_pp, utemp, F0Inv
-                            , (mesh->coord_pp), (mesh->etype_pp), gg_pp, gg_Face
-                            , val_pp, Stress, matprops, &nels_pp, &ntots, &(mesh->ndim)
-                            , &nst, &(mesh->nip), &(mesh->nod), &nodof, &(mesh->nFace)
-                            , &(mesh->nodFace), &(mesh->nipFace), &nloadedFace
-                            , &nr, &(mesh->np_types), &nprop, &material
-                            , (mesh->element));
-      delete[] utemp;
-    };
-
     //Linear System routines;
     void Update_LinearSystem(double* Km_pp, double* du_pp, double* u_pp, double* r_pp
                            , double* F0Inv, double* Stress, MESH *mesh){
@@ -543,273 +516,5 @@ class Solid_problemUP: public Problem{
       if(matprops != NULL) delete[] matprops;
       if(MASK     != NULL) delete[] MASK;
       if(val_pp   != NULL) delete[] val_pp;
-    };
-};
-
-
-/*-----------------------------------------------*\
-!                                                 !
-!      Solid mechanics Mixed-UP problem class     !
-!    for mixed Hexahedra 27-Node-U and 8-Node-P   !
-!         Full-active strain integration          !
-!                                                 !
-\*-----------------------------------------------*/
-template <typename MESH>
-class Solid_problemUP2: public Problem{
-  private:
-    int nTract, nDirch;
-    int nFace, nodof, nodofU, nels_pp, material, nprop=2;
-    int nmask=0, ntots=0, ndofU=0, neq_pp=0, nr=0;
-
-    double *matprops, *val_pp;
-  public:
-    int *gg_pp, *gg_Face, *MASK;
-    int nst=0, nloadedFace=0;
-
-    Solid_problemUP2(MESH *mesh, int mat){
-      int ndim  = mesh->return_DIM();
-      int nod   = mesh->return_NOD();
-      int nn_pp = mesh->return_NN_PP();
-      nels_pp   = mesh->return_NELS_PP();
-      nodofU    = ndim;
-      nodof     = ndim+1;
-      nst       = ((ndim+1)*ndim)/2;
-      ntots     = nodof*nod;
-      ndofU     = nodofU*nod;
-      neq_pp    = nodof*nn_pp;
-      nmask     = nodof*nod;
-      material  = mat;
-      nFace     = mesh->nFace;
-      gg_pp     = NULL;
-      gg_Face   = NULL;
-      MASK      = NULL;
-      matprops  = NULL;
-      val_pp    = NULL;
-      MASK      = new int[nmask];
-      calcsolidsmasks_(MASK, &nod, &nodof);
-    };
-
-
-    //Sizing routines
-    virtual int return_NODOF(){return nodof;};
-    virtual int return_NTOTS(){return ntots;};
-    virtual int return_NEQ_PP(){return neq_pp;};
-    virtual void set_MASK(int* mask){
-      for(int i = 0; i < nmask; i++) mask[i] = MASK[i];
-    };
-    virtual int return_LoadedFaces(){return nloadedFace;};
-
-    //Linear System routines;
-    void Update_LinearSystem(double* Km_pp, double* du_pp, double* u_pp, double* r_pp
-                           , double* astrain, double* fibre, double* Stress, MESH *mesh){
-      //Solid-mechanics element integration
-      double *rtemp, *utemp, *dutemp;
-      rtemp  = new double[ntots*nels_pp];
-      utemp  = new double[ntots*nels_pp];
-      dutemp = new double[ntots*nels_pp];
-      mesh->GATHER(u_pp, utemp, this);
-      mesh->GATHER(du_pp, dutemp, this);
-      solid_integration_up2_(rtemp, Km_pp, dutemp, utemp, astrain, fibre
-                       , (mesh->coord_pp), (mesh->etype_pp), gg_pp, gg_Face
-                       , val_pp, Stress, matprops, &nels_pp, &ntots, &(mesh->ndim)
-                       , &nst, &(mesh->nip), &(mesh->nod), &nodof, &(mesh->nFace)
-                       , &(mesh->nodFace), &(mesh->nipFace), &nloadedFace
-                       , &nr, &(mesh->np_types), &nprop, &material
-                       , (mesh->element));
-      mesh->SCATTER(r_pp, rtemp, this);
-      delete[] rtemp, utemp, dutemp;
-    };
-
-    void Read_Set_Matprops(char argv[50], Mesh *mesh){
-      if(matprops != NULL)   delete[] matprops;
-      if(matprops == NULL)   matprops = new double[nprop*(mesh->np_types)];
-      mesh->Read_Materials(argv, matprops, this);
-    };
-
-    void Read_Set_DirchletBCs(char argv[50], int nbnd, Mesh *mesh){
-      nDirch = nbnd;
-      if(gg_pp ==NULL) gg_pp  = new    int[ndofU*nels_pp];
-      if(val_pp==NULL) val_pp = new double[ndofU*nels_pp];
-      int *boundary_N; boundary_N = new int[nDirch*(nodofU+1)];
-      mesh->Read_BCs(argv, boundary_N, nDirch, nodofU);
-      mesh->Find_BoundaryNodes(gg_pp, boundary_N, &nbnd, &ndofU, &nodofU);
-      for(int i = 0; i < ndofU*nels_pp; i++) val_pp[i] = 0.0;
-      delete[] boundary_N;
-    };
-
-    void Read_Set_TractionBCs(char argv[50], int nbnd, Mesh *mesh){
-      nTract = nbnd;
-      if(gg_Face==NULL) gg_Face = new int[(nFace+1)*nels_pp];
-      int *boundary_N; boundary_N = new int[nTract*(nodofU+1)];
-      mesh->Read_BCs(argv, boundary_N, nTract, nodofU);
-      mesh->Find_BoundaryFaces(gg_Face, &nloadedFace, boundary_N, nTract, nodofU);
-      delete[] boundary_N;
-    };
-
-    //Finalise solver
-    void Finalise(){
-      if(gg_pp    != NULL) delete[] gg_pp;
-      if(gg_Face  != NULL) delete[] gg_Face;
-      if(matprops != NULL) delete[] matprops;
-      if(MASK     != NULL) delete[] MASK;
-      if(val_pp   != NULL) delete[] val_pp;
-    };
-};
-
-/*-----------------------------------------------*\
-!                                                 !
-!           ECG equation problem class            !
-!                                                 !
-\*-----------------------------------------------*/
-template <typename MESH>
-class ECG_Calculator: public Problem{
-  private:
-    int nels_pp;
-  public:
-    ECG_Calculator(MESH *mesh){
-      nels_pp = mesh->return_NELS_PP();
-    };
-
-
-    //Sizing routines
-    virtual int return_NODOF(){return  0;};
-    virtual int return_NTOTS(){return  0;};
-    virtual int return_NEQ_PP(){return 0;};
-    virtual void set_MASK(int* mask){;};
-    virtual int return_LoadedFaces(){return 0;};
-
-    //Calculate ECG
-    double Evaluate_ECG_at_point(double* Vtemp, double* utemp, double* x_dash
-                               , MESH *mesh){
-      double ECG_partial = 0.0;
-      double ECG_total   = 0.0;
-      pseudo_ecg_integration_(&ECG_partial, (mesh->element), (mesh->coord_pp)
-                            , Vtemp, utemp, x_dash, &(mesh->nFace), &(mesh->ndim)
-                            , &(mesh->nod), &(mesh->nip));
-      mesh->SUM_PP(&ECG_total, &ECG_partial);
-      return ECG_total;
-    };
-
-    //Finalise solver
-    void Finalise(){
-    };
-};
-
-/*-----------------------------------------------*\
-!                                                 !
-!       Volume enclosed by surface equation       !
-!                  problem class                  !
-!                                                 !
-\*-----------------------------------------------*/
-template <typename MESH>
-class Volume_Calculator: public Problem{
-  private:
-    int nels_pp;
-  public:
-    Volume_Calculator(MESH *mesh){
-      nels_pp = mesh->return_NELS_PP();
-    };
-
-
-    //Sizing routines
-    virtual int return_NODOF(){return  0;};
-    virtual int return_NTOTS(){return  0;};
-    virtual int return_NEQ_PP(){return 0;};
-    virtual void set_MASK(int* mask){;};
-    virtual int return_LoadedFaces(){return 0;};
-
-    //Calculate Volume
-    double Evaluate_Volume(double* utemp, double* xcentre, int *nloadedFace
-                         , int* gg_Face, MESH *mesh){
-      double Volume_partial = 0.0;
-      double Volume_total   = 0.0;
-      int ntots = (mesh->ndim)*(mesh->nod);
-      enclosed_volume_integration_(&Volume_partial, (mesh->element), (mesh->coord_pp)
-                                 , utemp, gg_Face, xcentre, &(mesh->nels_pp)
-                                 , &(mesh->ndim), &(mesh->nFace), &ntots, &(mesh->nod)
-                                 , &(mesh->nodFace), &(mesh->nipFace), nloadedFace);
-
-      mesh->SUM_PP(&Volume_total, &Volume_partial);
-      return Volume_total;
-    };
-
-    //Finalise solver
-    void Finalise(){
-    };
-};
-
-
-/*-----------------------------------------------*\
-!                                                 !
-!          PreCICE boundary coupling solver       !
-!                  problem class                  !
-!                                                 !
-\*-----------------------------------------------*/
-template <typename MESH>
-class PreCICEBoundaryFSI: public Problem{
-  private:
-    int nels_pp;
-    int rank, commsize, dimensions;
-    int meshID, stressID, displID;
-    int nloaded, VertexSize;
-    int *vertexIDs;
-    int nodofU, nodofS, ndofS, ndofU;
-
-  public:
-    PreCICEBoundaryFSI(MESH *mesh, const char participantName[50]
-                     , const char config[50], const char dataName[50]){
-      nels_pp    =  mesh->return_NELS_PP();
-      rank       = (mesh->numpe) - 1;
-      commsize   =  mesh->npes;
-      dimensions =  mesh->ndim;
-      char readItCheckp[50];
-      char writeInitialData[50];
-      char writeItCheckp[50];
-      
-      initialise_adapter_(dataName, readItCheckp, writeInitialData, writeItCheckp
-                        , participantName, config, &rank, &commsize, &dimensions);
-
-     int nodFace = mesh->return_NELS_PP();
-     nodofU = dimensions;
-     nodofS = dimensions*(dimensions+1)/2;
-     ndofU  = nodFace*nodofU;
-     ndofS  = nodFace*nodofS;
-    };
-
-    //Sizing routines
-    virtual int return_NODOF(){return  0;};
-    virtual int return_NTOTS(){return  0;};
-    virtual int return_NEQ_PP(){return 0;};
-    virtual void set_MASK(int* mask){;};
-    virtual int return_LoadedFaces(){return 0;};
-
-    void Set_precice_coupling_vertices(MESH *mesh, Problem *solid){
-      nloaded = solid->return_LoadedFaces();
-      VertexSize = nloaded*(mesh->nodFace) ;
-      set_datapoints_((mesh->coord_pp), (solid->gg_Face), vertexIDs
-                    , (mesh->element), &dimensions, &(mesh->nFace)
-                    , &(mesh->nodFace),&(mesh->nels_pp), &meshID
-                    , &VertexSize, &nloaded);
-    };
-
-
-    void Write_precice_disp(double* utemp, MESH *mesh, Problem *solid){
-      write_data_(utemp, (solid->gg_Face), vertexIDs, (mesh->element)
-                , &(mesh->ndim), &(mesh->ndim), &(mesh->nFace)
-                , &(mesh->nodFace), &(mesh->nels_pp), &displID, &VertexSize
-                , &nloaded, &(mesh->ndim) );
-    };
-
-
-    void Read_precice_stress(double* stress_pp, MESH *mesh, Problem *solid){
-      read_data_(stress_pp, (solid->gg_Face), vertexIDs, (mesh->element)
-               , &nodofS, &ndofS, &(mesh->nFace)
-               , &(mesh->nodFace), &(mesh->nels_pp), &stressID, &VertexSize
-               , &nloaded, &(mesh->ndim) );
-    };
-
-
-    //Finalise solver
-    void Finalise(){
     };
 };
