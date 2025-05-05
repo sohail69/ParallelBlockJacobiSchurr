@@ -137,10 +137,6 @@ extern "C"{
   void ensi_partition_data_(char argv[50], int *numpes, int *npess, int *nlen
                           , int *nn_pp, int *ndim);
 
-  void ensi_elmcolour_output_(char argv[50], int* gg_colour, int *numpes
-                             ,int *npess, int *nlen, int *nel_pp, int *ndim
-                             ,int *nod, char element[15]);
-
   //Finalise parafem and MPI processes
   void finalise_();
   
@@ -189,8 +185,7 @@ extern "C"{
                         , double* MATPROP, int *nel_pp, int *ntots, int *ndim
                         , int *nst, int *nip, int *nod, int *nodof, int *nFace
                         , int *nodFace, int *nipFace, int *nloadedFace, int *nr
-                        , int *np_types, int *nprop, int *material
-                        , char element[15]);
+                        , int *nprop, char element[15]);
 
   //--------------------------------------------------------------------
   // ALE Orthotropic Heat equation related functions

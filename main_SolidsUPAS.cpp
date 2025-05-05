@@ -40,25 +40,23 @@ int main(){
   npri2 = 20; //Solids Solver and Statistics
 
   //Tissue cuboid sample testCase
-  char input1[50]  = "Mesh/NewMesh/Mesh1/Normal_LV1 ";
-  char input2[50]  = "Mesh/NewMesh/Mesh1/Normal_LV1Solids ";
-  char input3[50]  = "Mesh/NewMesh/Mesh1/Normal_LV1Traction ";
-  char input4[50]  = "Mesh/NewMesh/Mesh1/Normal_LV1Heat ";
-  char input5[50]  = "Mesh/NewMesh/Mesh1/Normal_LV1CISD ";
+  char input1[50]  = "mesh/CuboidMesh ";
+  char input2[50]  = "mesh/CuboidMeshSolids ";
+  char input3[50]  = "mesh/CuboidMeshTract ";
+  char input4[50]  = "mesh/CuboidMeshHeat ";
+  char input5[50]  = "mesh/CuboidMeshCISD ";
 
-  char  output1[50] = "Results/TestCase  ";
-  char output11[50] = "Results/TestCaseCol  ";
-  char  output2[50] = "Results/TestCaseDisp  ";
-  char  output3[50] = "Results/TestCaseVolt  ";
-  char  output4[50] = "Results/TestCaseCstrain  ";
-  char  output5[50] = "Results/TestCasePress  ";
+  char  output1[50] = "results/TestCase  ";
+  char output11[50] = "results/TestCaseCol  ";
+  char  output2[50] = "results/TestCaseDisp  ";
+  char  output3[50] = "results/TestCaseVolt  ";
+  char  output4[50] = "results/TestCaseCstrain  ";
+  char  output5[50] = "results/TestCasePress  ";
 
   double *fibre, *diff, *Stress, *Stress0, *Stress1;
   double *astrain, *astrain0, *astrain1, *astemp_pp;
-  double *KA_pp, *KB_pp, *b_pp, *v_pp; 
   double *Km_pp, *Mmat_pp, *Rm_pp, *u_pp, *du_pp;
-  double *disp_pp, *press_pp, *F0Inv;
-  int *CellIDs, *StimDefs;
+  double *disp_pp, *press_pp;
   double xcentre[DIM] = {0.0,0.0,0.0};
 
   //Linear and Non-linear solver parameters
@@ -92,22 +90,15 @@ int main(){
   NTOTStress = nst*nodFace;
 
   //Heat Array Allocations
-  b_pp     = new double[NEQHeat];
-  v_pp     = new double[NEQHeat];
   astrain1 = new double[NEQHeat];
   astrain0 = new double[NEQHeat];
   astrain  = new double[NEQHeat];
   diff     = new double[DIM*nels_pp];
   fibre    = new double[DIM*DIM*nels_pp];
   astemp_pp = new double[NTOTHeat*nels_pp];
-  KA_pp     = new double[NTOTHeat*NTOTHeat*nels_pp];
-  KB_pp     = new double[NTOTHeat*NTOTHeat*nels_pp];
-  for(int i = 0; i < NEQHeat; i++){
-    b_pp[i] = v_pp[i] = astrain[i] = astrain0[i] = astrain1[i] = 0.0;
-  };
+
 
   //Solid Array Allocations
-  F0Inv    = new double[DIM*DIM*nels_pp];
   Km_pp    = new double[NTOTSolid*NTOTSolid*nels_pp];
   Mmat_pp  = new double[NTOTSolid*NTOTSolid*nels_pp];
   Rm_pp    = new double[NEQSolid];
@@ -133,16 +124,13 @@ int main(){
   solids.Read_Set_DirchletBCs(input2, (mesh.nbnd), &mesh);
   
   //Have to manually input number of Traction nodes
-  solids.Read_Set_TractionBCs(input3, 901, &mesh); 
+  solids.Read_Set_TractionBCs(input3, 121, &mesh); 
 
   nloaded=0; nloaded = solids.return_LoadedFaces();
   if(nloaded > 0) Stress  = new double[NTOTStress*nloaded];
   if(nloaded > 0) Stress0 = new double[NTOTStress*nloaded];
   if(nloaded > 0) Stress1 = new double[NTOTStress*nloaded];
-
-  if(nloaded > 0) for(int I=0; I<(NTOTStress*nloaded); I++) Stress[I]  = 0.0;
-  if(nloaded > 0) for(int I=0; I<(NTOTStress*nloaded); I++) Stress0[I] = 0.0;
-  if(nloaded > 0) for(int I=0; I<(NTOTStress*nloaded); I++) Stress1[I] = 0.0;
+  if(nloaded > 0) for(int I=0; I<(NTOTStress*nloaded); I++) Stress[I] = Stress0[I] = Stress1[I]=0.0;
 
 
   //=================
@@ -150,21 +138,16 @@ int main(){
   //=================
   mesh.ENSI_GEO_output(output1,16);
   mesh.ENSI_Partition(output1,16);
-  mesh.ENSI_COLOUR_output(output11,17);
   mesh.ENSI_Traction((&solids)->gg_Face);
 
-
-
   double pressures1, pressures0;
-  for(int I=0; I<NEQHeat; I++) astrain0[I]= 0.00;
-  for(int I=0; I<NEQHeat; I++) astrain1[I]= 0.00;
+  for(int I=0; I<NEQHeat; I++) astrain0[I] = astrain1[I] = 0.00;
   if(NUMPE==1) cout << " Non-Linear Newton Iterations :" << endl;
 
   pressures0 = 0.00*(1.00E-04);
   pressures1 = (5.000E+03)*(1.00E-04);
   UpdateTStressFunc(Stress0,&pressures0,&NTOTStress,&DIM,&nloaded);
   UpdateTStressFunc(Stress1,&pressures1,&NTOTStress,&DIM,&nloaded);
-  nlsteps = 12;
 
   int torp = 0;
   split_u_p_(disp_pp,press_pp,u_pp,&DIM,&nn_pp,&NEQSolid);
@@ -172,75 +155,65 @@ int main(){
   mesh.ENSI_Data_output(output2,20,disp_pp,nn_pp,DIM,&torp,1); 
   mesh.ENSI_Data_output(output5,21,press_pp,nn_pp,1,&torp,1);
 
-
-
-  nllimit = 12;
+  nlsteps = 1;//12;
+  nllimit = 1;//12;
   double Pressures[5] = {5.000E+03, 12.092E+03, 15.960E+03, 14.932E+03, 5.000E+03};
   double Strains[5]   = {1.236E-03, 1.218E-03, 8.075E-02, 8.916E-02, 8.399E-02};
-  int LoadStepCounts[5] = {15, 15, 120, 15, 15};
-for(int Lcases=0; Lcases<5; Lcases++){
-    for(int I=0; I<NEQHeat; I++){
-      if(Lcases == 0) astrain0[I]= 0.00;
-      if(Lcases != 0) astrain0[I]= Strains[Lcases-1];
-    } 
+  int LoadStepCounts[5] = {3, 15, 120, 15, 15};
+  for(int Lcases=0; Lcases<1; Lcases++){
+    for(int I=0; I<NEQHeat; I++) astrain0[I]= ((Lcases != 0) ? Strains[Lcases-1] : 0.00);
     for(int I=0; I<NEQHeat; I++) astrain1[I]= Strains[Lcases];
     if(NUMPE==1) cout << " Non-Linear Newton Iterations :" << endl;
-
     if(Lcases != 0) pressures0 = Pressures[Lcases-1]*(1.00E-04);
     pressures1 = Pressures[Lcases]*(1.00E-04);
+    UpdateTStressFunc(Stress0,&pressures0,&NTOTStress,&DIM,&nloaded);  //Simple Update
+    UpdateTStressFunc(Stress1,&pressures1,&NTOTStress,&DIM,&nloaded);
+    nlsteps = LoadStepCounts[Lcases];
 
-      UpdateTStressFunc(Stress0,&pressures0,&NTOTStress,&DIM,&nloaded);  //Simple Update
-      UpdateTStressFunc(Stress1,&pressures1,&NTOTStress,&DIM,&nloaded);
+    for(int Lsteps = 0; Lsteps<nlsteps; Lsteps++){//LoadSteps
+      if(NUMPE==1) cout<<" Load-Step :"<<(Lsteps+1)<< " of "<<nlsteps<< endl;
+      UpdateIncrement(Stress,Stress0,Stress1,(NTOTStress*nloaded),Lsteps,nlsteps);
+      UpdateIncrement(astrain,astrain0,astrain1,NEQHeat,Lsteps,nlsteps);
+      mesh.GATHER(astrain, astemp_pp, &heat);
 
-      nlsteps = LoadStepCounts[Lcases];
-      for(int Lsteps = 0; Lsteps<nlsteps; Lsteps++){//LoadSteps
-        if(NUMPE==1) cout<<" Load-Step :"<<(Lsteps+1)<< " of "<<nlsteps<< endl;
-        UpdateIncrement(Stress,Stress0,Stress1,(NTOTStress*nloaded),Lsteps,nlsteps);
-        UpdateIncrement(astrain,astrain0,astrain1,NEQHeat,Lsteps,nlsteps);
-        mesh.GATHER(astrain, astemp_pp, &heat);
+      for(int NIters = 0; NIters<nllimit; NIters++){//NewtonSteps
+        double one=1.0, mone=-1.0;
+        double du_norm = 0.0, R_norm = 0.0;
+        solids.Update_LinearSystem(Km_pp,Rm_pp,u_pp,astemp_pp,fibre,Stress,&mesh);
+        R_norm = mesh.norm_p(Rm_pp, NEQSolid);
+        if(mesh.IsItConverged(&R_norm, &nltol)) break;
+/*
+        //Solve Linear system
+        // 1-SSOR, 2-Chol, 3-LDL^T, 4-LU, 5-LDU, 6-ILU preconditioner
+        liters=0; lerr=0.0;
+        mesh.Set_LsolverPORDER(153);
+        mesh.Set_LsolverLIMIT(4);
+        mesh.Set_LsolverSOLVER(4);
+        mesh.Set_LsolverTOL(ltol2);
+        mesh.Solve_LinearSystem(Km_pp,Mmat_pp,du_pp,Rm_pp,&liters,&lerr,&solids,4);*/
+        du_norm = mesh.norm_p(du_pp, NEQSolid);
 
-
-        for(int NIters = 0; NIters<nllimit; NIters++){//NewtonSteps
-          double one=1.0, mone=-1.0;
-          double du_norm = 0.0, gamma=0.0, R_norm = 0.0;
-//          solids.Update_LinearSystem(Km_pp,du_pp,u_pp,Rm_pp,astemp_pp,fibre,Stress,&mesh);
-          R_norm = mesh.norm_p(Rm_pp, NEQSolid);
-          if(mesh.IsItConverged(&R_norm, &nltol)) break;
-
-          //Solve Linear system
-          // 1-SSOR, 2-Chol, 3-LDL^T, 4-LU, 5-LDU, 6-ILU preconditioner
-          liters=0; lerr=0.0;
-          mesh.Set_LsolverPORDER(153);
-          mesh.Set_LsolverLIMIT(4);
-          mesh.Set_LsolverSOLVER(4);
-          mesh.Set_LsolverTOL(ltol2);
-          mesh.Solve_LinearSystem(Km_pp,Mmat_pp,du_pp,Rm_pp
-                                 ,&liters,&lerr,&solids,4);
-          du_norm = mesh.norm_p(du_pp, NEQSolid);
-
-          //Output some sim stats
-          if(NUMPE==1) cout << setw(14) << "Newton Iteration :"
-                            << setw(8)  << NIters  << setw(8)  << liters
-                            << setw(14) << du_norm << setw(14) << R_norm
-                            << setw(14) << lerr    << endl;
-          gamma = mone;
-          mesh.Increment(u_pp,u_pp,du_pp,&one,&gamma,&NEQSolid);
-        }//NewtonSteps
+        //Output some sim stats
+        if(NUMPE==1) cout << setw(14) << "Newton Iteration :"
+                          << setw(8)  << NIters  << setw(8)  << liters
+                          << setw(14) << du_norm << setw(14) << R_norm
+                          << setw(14) << lerr    << endl;
+        mesh.Increment(u_pp,u_pp,du_pp,&one,&mone,&NEQSolid);
+      }//NewtonSteps
 
       torp = Lcases+1;
       split_u_p_(disp_pp,press_pp,u_pp,&DIM,&nn_pp,&NEQSolid);
       mesh.ENSI_Data_output(output4,23,astrain, &torp, &heat,1);
       mesh.ENSI_Data_output(output2,20,disp_pp,nn_pp,DIM,&torp,1); 
       mesh.ENSI_Data_output(output5,21,press_pp,nn_pp,1,&torp,1);
-  }//LoadSteps
-}//Load cases	
+    }//LoadSteps
+  }//Load cases	
 
   //Clean up and finalisation
   if(nloaded > 0) delete[] Stress, Stress0, Stress1;
-  delete[] b_pp, v_pp, astrain1,  astrain0, astrain;
-  delete[] diff, fibre, astemp_pp, KA_pp, KB_pp;
-  delete[] F0Inv, Mmat_pp, Km_pp, Rm_pp, u_pp, du_pp;
-  delete[] disp_pp, press_pp;
+  delete[] astrain1, astrain0, astrain;
+  delete[] diff, fibre, astemp_pp, disp_pp, press_pp;
+  delete[] Mmat_pp, Km_pp, Rm_pp, u_pp, du_pp;
   solids.Finalise();
   heat.Finalise();
   mesh.Finalise();

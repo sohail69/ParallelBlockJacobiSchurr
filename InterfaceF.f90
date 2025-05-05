@@ -421,12 +421,14 @@ SUBROUTINE STOP_COND_PP(IsConverged, error, rtol)
   USE gather_scatter;  USE MP_INTERFACE;
   USE maths;
   IMPLICIT NONE
+  INTEGER                 :: IsConvergedLocal
   INTEGER,   INTENT(INOUT):: IsConverged
   REAL(iwp), INTENT(IN)   :: error, rtol
 
   IsConverged = 0;
-  IF(error < rtol) IsConverged = 1;
-  CALL MPI_ALLREDUCE(IsConverged,IsConverged,1,MPI_INTEGER,MPI_SUM &
+  IsConvergedLocal = 0;
+  IF(error < rtol) IsConvergedLocal = 1;
+  CALL MPI_ALLREDUCE(IsConvergedLocal,IsConverged,1,MPI_INTEGER,MPI_SUM &
                    , MPI_COMM_WORLD,ier);
   RETURN
 END SUBROUTINE STOP_COND_PP
@@ -526,40 +528,6 @@ SUBROUTINE ENSI_GEO_OUTPUT(argv, element, nlen, gcoord_pp, gnum_pp, numpes &
 END SUBROUTINE ENSI_GEO_OUTPUT
 
 !-------------------------------
-! Alya ENSI Gold Output element colour
-!-------------------------------
-SUBROUTINE ENSI_ELMCOLOUR_OUTPUT(argv,gg_colour,numpes,npess,nlen,nel_pp &
-                                ,ndim,nod,element)
-  USE Parallel_IO;   USE precision;
-  USE new_library;   USE MP_INTERFACE;
-  USE gather_scatter;
-  IMPLICIT NONE
-  CHARACTER(LEN=15), INTENT(IN)   :: element;   
-  CHARACTER(LEN=50), INTENT(IN)   :: argv;
-  INTEGER,           INTENT(IN)   :: numpes,npess,nlen
-  INTEGER,           INTENT(IN)   :: nel_pp,ndim,nod;
-  INTEGER,           INTENT(IN)   :: gg_colour(nel_pp);
-  INTEGER,           PARAMETER    :: j=0,var=2;
-  REAL(iwp),         ALLOCATABLE  :: gg_colourR(:,:);
-  INTEGER                         :: Iel, I, K, L, nel2;
-
-  IF(nod/=27) L=1;
-  IF(nod==27) L=8; 
-  nel2 = L*nel_pp
-  ALLOCATE(gg_colourR(1,nel2))
-  DO Iel=1,nel_pp
-    DO I=1,L
-      K = L*(Iel-1) + I;
-      gg_colourR(1,K) = REAL(gg_colour(Iel),iwp)
-    ENDDO
-  ENDDO
-  CALL ENSI_FILE_OUTPUT(argv,gg_colourR,numpes,npess,nlen,nel2,nel2 &
-                       ,1,ndim,j,var,nod,element)
-  DEALLOCATE(gg_colourR)
-  RETURN
-END SUBROUTINE ENSI_ELMCOLOUR_OUTPUT
-
-!-------------------------------
 ! Alya ENSI Gold Real data output functions
 !-------------------------------
 SUBROUTINE ENSI_DATA_OUTPUT(argv,xnew_pp,numpes,npess,nlen,neq_p &
@@ -616,7 +584,7 @@ SUBROUTINE ENSI_TRACTION_DATA(element, gg_Face, numpes, npess, ndim  &
   IMPLICIT NONE
    INTEGER                         :: Iel, I, K, L;
    INTEGER                         :: nlen=23;
-   CHARACTER(LEN=50)               :: argv='Results/TractionSurface';
+   CHARACTER(LEN=50)               :: argv='results/TractionSurface';
    CHARACTER(LEN=15)               :: face_element;
    CHARACTER(LEN=15), INTENT(IN)   :: element;
    INTEGER,           INTENT(IN)   :: numpes,npess;
@@ -772,6 +740,8 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   ! being integrated this cost of recalculating them only once per every nel_pp
   ! elements makes the cost irrelevant, more time can be saved in optimisations
   ! on the individual element level
+  StoreKE  = zero;
+  Residual = zero;
 
   !---
   ! Element DOF and integration sizing routines
@@ -779,6 +749,7 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   nodofU = ndim;
   nodofP = 1;
   nodU = nodMax;
+  nodP = 8;
   ndofU=nodofU*nodU
   ndofP=nodofP*nodP
 
@@ -821,11 +792,11 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   DO IEL = 1,nel_pp
     DO J = 1,nodU
       DO I = 1,ndim
-        IF(gg_pp(M,iel)==0)THEN
-          Residual(M,IEL)  = zero;
-          StoreKE(M,:,IEL) = zero;
-          StoreKE(M,M,IEL) = one;
-        ENDIF
+        !IF(gg_pp(M,iel)==0)THEN
+        !  Residual(M,IEL)  = zero;
+         ! StoreKE(M,:,IEL) = zero;
+          !StoreKE(M,M,IEL) = one;
+        !ENDIF
       ENDDO
     ENDDO
   ENDDO

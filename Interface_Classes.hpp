@@ -97,9 +97,11 @@ class Mesh{
       Read_Job(argv, nlen, npri);
       Read_Mesh(argv);
       /* Preconditioner element colouring */
+/*
       if(gg_colour==NULL) gg_colour = new int[nels_pp];
       preconditioner_colouring_(gg_colour,&ncolour,gnum_pp,&nod,&nn_pp,&nels_pp
                                ,&nn,&nels,&npes,&numpe);
+*/
     };
 
     //Sizing routines
@@ -257,10 +259,6 @@ class Mesh{
                       , &npes, &ndim, &nod, &nn, &nels_pp, &nn_pp);
     };
 
-    void ENSI_COLOUR_output(char argv[50], int nlen){
-      ensi_elmcolour_output_(argv,gg_colour,&numpe,&npes,&nlen,&nels_pp,&ndim
-                            ,&nod,element);
-    }
 
     void ENSI_Data_output(char argv[50], int nlen, double* xnew_pp
                         , int *j, Problem *prob, int var){
@@ -414,7 +412,7 @@ template <typename MESH>
 class Solid_problemUP: public Problem{
   private:
     int nTract, nDirch;
-    int nFace, nodof, nodofU, nels_pp, material, nprop=2;
+    int nFace, nodof, nodofU, nels_pp, nprop=2;
     int nmask=0, ntots=0, ndofU=0, neq_pp=0, nr=0;
 
     double *matprops, *val_pp;
@@ -434,7 +432,6 @@ class Solid_problemUP: public Problem{
       ndofU     = nodofU*nod;
       neq_pp    = nodof*nn_pp;
       nmask     = nodof*nod;
-      material  = mat;
       nFace     = mesh->nFace;
       gg_pp     = NULL;
       gg_Face   = NULL;
@@ -456,24 +453,21 @@ class Solid_problemUP: public Problem{
     virtual int return_LoadedFaces(){return nloadedFace;};
 
     //Linear System routines;
-    void Update_LinearSystem(double* Km_pp, double* du_pp, double* u_pp, double* r_pp
-                           , double* F0Inv, double* Stress, MESH *mesh){
+    void Update_LinearSystem(double* Km_pp, double* r_pp, double* u_pp, double* astrain
+                           , double* fibre, double* Stress, MESH *mesh){
       //Solid-mechanics element integration
-      double *rtemp, *utemp, *dutemp;
+      double *rtemp, *utemp;
       rtemp  = new double[ntots*nels_pp];
       utemp  = new double[ntots*nels_pp];
-      dutemp = new double[ntots*nels_pp];
       mesh->GATHER(u_pp, utemp, this);
-      mesh->GATHER(du_pp, dutemp, this);
-      solid_integration_up_(rtemp, Km_pp, dutemp, utemp, F0Inv
-                       , (mesh->coord_pp), (mesh->etype_pp), gg_pp, gg_Face
-                       , val_pp, Stress, matprops, &nels_pp, &ntots, &(mesh->ndim)
-                       , &nst, &(mesh->nip), &(mesh->nod), &nodof, &(mesh->nFace)
+      solid_integration_up_(rtemp, Km_pp, utemp, astrain, fibre
+                       , (mesh->coord_pp), gg_pp, gg_Face, val_pp, Stress
+                       , matprops, &nels_pp, &ntots, &(mesh->ndim), &nst
+                       , &(mesh->nip), &(mesh->nod), &nodof, &(mesh->nFace)
                        , &(mesh->nodFace), &(mesh->nipFace), &nloadedFace
-                       , &nr, &(mesh->np_types), &nprop, &material
-                       , (mesh->element));
+                       , &nr, &nprop, (mesh->element));
       mesh->SCATTER(r_pp, rtemp, this);
-      delete[] rtemp, utemp, dutemp;
+      delete[] rtemp, utemp;
     };
 
     void Update_active_strain(double* F0Inv, double* astrain, double* fibre
@@ -484,9 +478,12 @@ class Solid_problemUP: public Problem{
     };
 
     void Read_Set_Matprops(char argv[50], Mesh *mesh){
+      double *matprops1 = new double[nprop*(mesh->np_types)];
+      mesh->Read_Materials(argv, matprops1, this);
       if(matprops != NULL)   delete[] matprops;
-      if(matprops == NULL)   matprops = new double[nprop*(mesh->np_types)];
-      mesh->Read_Materials(argv, matprops, this);
+      if(matprops == NULL)   matprops = new double[nprop];
+      for(int I=0; I<nprop; I++) matprops[I] = matprops1[I];
+      delete[] matprops1;
     };
 
     void Read_Set_DirchletBCs(char argv[50], int nbnd, Mesh *mesh){

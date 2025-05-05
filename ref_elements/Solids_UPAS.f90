@@ -12,38 +12,39 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
                                   , nel_pp, ntots, ndofU, ndofP, ndim , nst  &
                                   , nip, nodU, nodp)
   IMPLICIT NONE
-  INTEGER                :: Iel, Ig, i, j, k, l, p, q, m, n, o, s, t;
-  INTEGER,  INTENT(IN)   :: nprop, ntots, ndim, nst;
-  INTEGER,  INTENT(IN)   :: nip, nodU, nodp, ndofU, ndofP, nel_pp
-  REAL(iwp),INTENT(IN)   :: astrain(nodU,nel_pp), fibre(ndim,ndim,nel_pp);
-  REAL(iwp),INTENT(IN)   :: utemp(ntots,nel_pp), MATPROP(nprop);
-  REAL(iwp),INTENT(IN)   :: coord(nodU,ndim,nel_pp), weights(nip)
-  REAL(iwp),INTENT(IN)   :: dNi_u(ndim,nodU,nip), Ni_u(nodU,nip), Ni_p(nodP,nip)
-  REAL(iwp),INTENT(INOUT):: Km(ntots,ntots,nel_pp), Rm(ntots,nel_pp);
-  REAL(iwp),PARAMETER    :: zero = 0._iwp, one = 1._iwp, two = 2._iwp, three=3._iwp;
+  INTEGER                 :: Iel, Ig, i, j, k, l, p, q, m, n, o, s, t;
+  INTEGER,  INTENT(IN)    :: nprop, ntots, ndim, nst;
+  INTEGER,  INTENT(IN)    :: nip, nodU, nodp, ndofU, ndofP, nel_pp
+  REAL(iwp),INTENT(IN)    :: astrain(nodU,nel_pp), fibre(ndim,ndim,nel_pp);
+  REAL(iwp),INTENT(IN)    :: utemp(ntots,nel_pp), MATPROP(nprop);
+  REAL(iwp),INTENT(IN)    :: coord(nodU,ndim,nel_pp), weights(nip)
+  REAL(iwp),INTENT(IN)    :: dNi_u(ndim,nodU,nip), Ni_u(nodU,nip), Ni_p(nodP,nip)
+  REAL(iwp),INTENT(INOUT) :: Km(ntots,ntots,nel_pp), Rm(ntots,nel_pp);
+  REAL(iwp),PARAMETER     :: zero = 0._iwp, one = 1._iwp, two = 2._iwp, three=3._iwp;
 
   !Deformation related terms
   REAL(iwp):: Jac(ndim,ndim), Jacinv(ndim,ndim), det(nip);
   REAL(iwp):: PK2, Ctang, S_bulk, K_bulk
   REAL(iwp):: S_kk(nip), C_kkpp(nip), auxm(ndim,nodU), pxm(nodP)
   REAL(iwp):: C_ijkl(nst,nst,nip), S_ij(nst,nip), CdefInv(ndim,ndim,nip)
-  REAL(iwp):: strain, gamma_f, gamma_n, gamma_s, press(nip);
-  REAL(iwp):: Fdef(ndim,ndim), Fedef(ndim,ndim), F0def(ndim,ndim);
+  REAL(iwp):: strain, gamma_f, gamma_n, gamma_s
+  REAL(iwp):: Fdef(ndim,ndim), Fedef(ndim,ndim), F0def(ndim,ndim), press(nip);
   REAL(iwp):: Cdef(ndim,ndim), F0inv(ndim,ndim), dE(nst,ndofU,nip), d2E(nst,ndofU,ndofU,nip);
-  INTEGER  :: Map(ndim+1,nodU);
+  INTEGER  :: Map(ndim+1,nodU), UMAP(ndim,nodU);
 
   Km     = zero;  Rm      = zero;   dE     = zero;  d2E     = zero;
   Cdef   = zero;  CdefInv = zero;   Fdef   = zero;
   C_ijkl = zero;  S_ij    = zero;   Fedef  = zero;
   Jac    = zero;  Jacinv  = zero;   det    = zero;
 
+  CALL SDF_MAP(Map, nodU, ndim+1)
+  CALL SDF_MAP(UMap, nodU, ndim)
+
   !===
   !
   ! Integrate all the elements
   !
   !====
-
-  !$PRAGMA OMP 
   ELEMENTS:DO Iel = 1, nel_pp
     !-----
     ! Calculate the stress,
@@ -51,11 +52,12 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
     ! deformation measures at
     ! the gauss-points
     !-----
-    CALL SDF_MAP(Map, nodU, ndim+1)
     DO I=1,ndim
       auxm(I,:) = utemp(Map(I,:),Iel);
     ENDDO
     pxm = utemp(Map(ndim+1,1:nodP),Iel);
+
+
 
     GAUSS_PTS1: DO Ig = 1,nip
       ! Calculate the coordinate
@@ -85,7 +87,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       ! Calculate the stress, stiffness
       ! and strain measures/derivatives
       Fedef = MATMUL(Fdef,F0Inv)
-      CALL GREENLAGRANGE_DERIVS_AS(Fdef,F0Inv,dNi_u,dE(:,:,Ig),d2E(:,:,:,Ig),Map(1:ndim,:),ndim,ndofU,nodU,nst)
+      CALL GREENLAGRANGE_DERIVS_AS(Fdef,F0Inv,dNi_u(:,:,Ig),dE(:,:,Ig),d2E(:,:,:,Ig),UMAP,ndim,ndofU,nodU,nst)
       CALL INVERT2(Cdef,CdefInv(:,:,Ig),ndim); 
       CALL MATMOD_NOH(C_ijkl(:,:,Ig),S_ij(:,Ig),MATPROP,Fdef,ndim,nst,nprop)
 
@@ -108,7 +110,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
     ! Integrate the residuals
     ! and the Jacobians
     !-----
-    ! UU -Block
+    ! UU - Block
     ! Pure displacement block
     !
     DO M = 1,ndofU
@@ -148,6 +150,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       END DO GAUSS_PTS3
     ENDDO
   ENDDO ELEMENTS
+
   RETURN
 END SUBROUTINE STATIC_SOLIDUPAS_ELEMENT
 
@@ -171,7 +174,7 @@ SUBROUTINE GREENLAGRANGE_DERIVS_AS(Fdef,F0Inv,dNi,dE,d2E,Map,ndim,ntots,nod,nst)
       a = 0.5_iwp*F0Inv(p,i)*F0Inv(q,j)
       IF(p/=q) a = F0Inv(p,i)*F0Inv(q,j)
       DO k = 1,ndim
-        d1temp(Map(k,:)) = d1temp(Map(k,:)) + (dNi(p,:)*Fdef(k,q) + dNi(q,:)*Fdef(k,p))
+!        d1temp(Map(k,:)) = d1temp(Map(k,:)) + (dNi(p,:)*Fdef(k,q) + dNi(q,:)*Fdef(k,p))
         DO l = 1,ndim
           DO r = 1,nod
             d2temp(Map(l,r),Map(k,:)) = d2temp(Map(l,r),Map(k,:)) + (dNi(p,r)*dNi(q,:) + dNi(q,r)*dNi(p,:))
