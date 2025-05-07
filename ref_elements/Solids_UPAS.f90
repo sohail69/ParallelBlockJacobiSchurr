@@ -87,9 +87,9 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       ! Calculate the stress, stiffness
       ! and strain measures/derivatives
       Fedef = MATMUL(Fdef,F0Inv)
-      CALL GREENLAGRANGE_DERIVS_AS(Fdef,F0Inv,dNi_u(:,:,Ig),dE(:,:,Ig),d2E(:,:,:,Ig),UMAP,ndim,ndofU,nodU,nst)
+      CALL GREENLAGRANGE_DERIVS_AS(Fedef,F0Inv,dNi_u(:,:,Ig),dE(:,:,Ig),d2E(:,:,:,Ig),UMAP,ndim,ndofU,nodU,nst)
       CALL INVERT2(Cdef,CdefInv(:,:,Ig),ndim); 
-      CALL MATMOD_NOH(C_ijkl(:,:,Ig),S_ij(:,Ig),MATPROP,Fdef,ndim,nst,nprop)
+      CALL MATMOD_NOH(C_ijkl(:,:,Ig),S_ij(:,Ig),MATPROP,Fedef,ndim,nst,nprop)
 
       ! Calculate the volumetric stress
       ! and the Bulk stiffness at the
@@ -105,6 +105,8 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       !at the Gauss points
       press(Ig) = DOT_PRODUCT(Ni_p(:,Ig),pxm)
     ENDDO GAUSS_PTS1
+
+IF(IEL == 1) WRITE(*,*) nip
 
     !-----
     ! Integrate the residuals
@@ -205,8 +207,11 @@ SUBROUTINE MATMOD_NOH(C_ijkl,S_ij,Matprops,Fdef,ndim,nst,nprop)
 
    J3    = determinant(Fdef)
    LJ3   = DLOG(J3)
-   Y     = Matprops(1); !1.00_iwp    !
-   nu    = Matprops(2); !0.49999_iwp !
+!   Y     = Matprops(1); !1.00_iwp    !
+!   nu    = Matprops(2); !0.49999_iwp !
+   Y     = 1.00_iwp;
+   nu    = 0.49999_iwp;
+
 
    mu    = (4.6_iwp/2.2_iwp)/(Y/(2._iwp+2._iwp*nu))
    lmbda = Y*nu/((1+nu)*(1._iwp-2._iwp*nu))

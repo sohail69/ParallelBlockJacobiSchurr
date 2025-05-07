@@ -114,10 +114,6 @@ int main(){
 
   //Heat problem set-up BCs, materials etc..
   Read_Fibre_Diffusion<Mesh>(input4,fibre,diff,DIM,&mesh);
-  double *disp_tmp = new double[DIM*nod*nels_pp];
-  for(int I=0; I<(DIM*nod*nels_pp); I++) disp_tmp[I] = 0.0;
-  heat.Update_Stiffness(KA_pp, KB_pp, disp_tmp, fibre, diff, &dt, &mesh);
-  delete[] disp_tmp;
 
   //Solids problem set-up BCs, materials etc..
   solids.Read_Set_Matprops(input2, &mesh);
@@ -159,7 +155,7 @@ int main(){
   nllimit = 1;//12;
   double Pressures[5] = {5.000E+03, 12.092E+03, 15.960E+03, 14.932E+03, 5.000E+03};
   double Strains[5]   = {1.236E-03, 1.218E-03, 8.075E-02, 8.916E-02, 8.399E-02};
-  int LoadStepCounts[5] = {3, 15, 120, 15, 15};
+  int LoadStepCounts[5] = {1, 15, 120, 15, 15};
   for(int Lcases=0; Lcases<1; Lcases++){
     for(int I=0; I<NEQHeat; I++) astrain0[I]= ((Lcases != 0) ? Strains[Lcases-1] : 0.00);
     for(int I=0; I<NEQHeat; I++) astrain1[I]= Strains[Lcases];
