@@ -33,8 +33,8 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
   INTEGER  :: Map(ndim+1,nodU), UMAP(ndim,nodU);
 
   Km     = zero;  Rm      = zero;   dE     = zero;  d2E     = zero;
-  Cdef   = zero;  CdefInv = zero;   Fdef   = zero;
-  C_ijkl = zero;  S_ij    = zero;   Fedef  = zero;
+  Cdef   = zero;  CdefInv = zero;   Fdef   = zero; C_kkpp   = zero;
+  C_ijkl = zero;  S_ij    = zero;   Fedef  = zero; S_kk     = zero;
   Jac    = zero;  Jacinv  = zero;   det    = zero;
 
   CALL SDF_MAP(Map, nodU, ndim+1)
@@ -56,8 +56,8 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       auxm(I,:) = utemp(Map(I,:),Iel);
     ENDDO
     pxm = utemp(Map(ndim+1,1:nodP),Iel);
-
-
+    S_kk    = zero;
+    C_kkpp  = zero;
 
     GAUSS_PTS1: DO Ig = 1,nip
       ! Calculate the coordinate
@@ -87,6 +87,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       ! Calculate the stress, stiffness
       ! and strain measures/derivatives
       Fedef = MATMUL(Fdef,F0Inv)
+      Cdef = MATMUL(TRANSPOSE(Fedef),Fedef)
       CALL GREENLAGRANGE_DERIVS_AS(Fedef,F0Inv,dNi_u(:,:,Ig),dE(:,:,Ig),d2E(:,:,:,Ig),UMAP,ndim,ndofU,nodU,nst)
       CALL INVERT2(Cdef,CdefInv(:,:,Ig),ndim); 
       CALL MATMOD_NOH(C_ijkl(:,:,Ig),S_ij(:,Ig),MATPROP,Fedef,ndim,nst,nprop)
@@ -105,8 +106,6 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       !at the Gauss points
       press(Ig) = DOT_PRODUCT(Ni_p(:,Ig),pxm)
     ENDDO GAUSS_PTS1
-
-IF(IEL == 1) WRITE(*,*) nip
 
     !-----
     ! Integrate the residuals
@@ -176,7 +175,7 @@ SUBROUTINE GREENLAGRANGE_DERIVS_AS(Fdef,F0Inv,dNi,dE,d2E,Map,ndim,ntots,nod,nst)
       a = 0.5_iwp*F0Inv(p,i)*F0Inv(q,j)
       IF(p/=q) a = F0Inv(p,i)*F0Inv(q,j)
       DO k = 1,ndim
-!        d1temp(Map(k,:)) = d1temp(Map(k,:)) + (dNi(p,:)*Fdef(k,q) + dNi(q,:)*Fdef(k,p))
+        d1temp(Map(k,:)) = d1temp(Map(k,:)) + (dNi(p,:)*Fdef(k,q) + dNi(q,:)*Fdef(k,p))
         DO l = 1,ndim
           DO r = 1,nod
             d2temp(Map(l,r),Map(k,:)) = d2temp(Map(l,r),Map(k,:)) + (dNi(p,r)*dNi(q,:) + dNi(q,r)*dNi(p,:))
@@ -211,7 +210,6 @@ SUBROUTINE MATMOD_NOH(C_ijkl,S_ij,Matprops,Fdef,ndim,nst,nprop)
 !   nu    = Matprops(2); !0.49999_iwp !
    Y     = 1.00_iwp;
    nu    = 0.49999_iwp;
-
 
    mu    = (4.6_iwp/2.2_iwp)/(Y/(2._iwp+2._iwp*nu))
    lmbda = Y*nu/((1+nu)*(1._iwp-2._iwp*nu))
