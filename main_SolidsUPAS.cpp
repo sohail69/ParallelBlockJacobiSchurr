@@ -67,7 +67,6 @@ int main(){
   int nlsteps = 30, nllimit = 8, llimit = 70, liters = 0;
   double lerr, nlerror, nltol = 3.0E-08, ltol1 = 1.0E-21, ltol2 = 1.0E-08;
 
-
   //=================
   //Mesh and problem definition
   //=================
@@ -128,7 +127,6 @@ int main(){
   if(nloaded > 0) Stress1 = new double[NTOTStress*nloaded];
   if(nloaded > 0) for(int I=0; I<(NTOTStress*nloaded); I++) Stress[I] = Stress0[I] = Stress1[I]=0.0;
 
-
   //=================
   //Output Ensi Case files
   //=================
@@ -137,30 +135,17 @@ int main(){
   mesh.ENSI_Traction((&solids)->gg_Face);
 
   double pressures1, pressures0;
-  for(int I=0; I<NEQHeat; I++) astrain0[I] = astrain1[I] = 0.00;
-  if(NUMPE==1) cout << " Non-Linear Newton Iterations :" << endl;
-
-  pressures0 = 0.00*(1.00E-04);
-  pressures1 = (5.000E+03)*(1.00E-04);
-  UpdateTStressFunc(Stress0,&pressures0,&NTOTStress,&DIM,&nloaded);
-  UpdateTStressFunc(Stress1,&pressures1,&NTOTStress,&DIM,&nloaded);
-
   int torp = 0;
-  split_u_p_(disp_pp,press_pp,u_pp,&DIM,&nn_pp,&NEQSolid);
-  mesh.ENSI_Data_output(output4,23,astrain, &torp, &heat,1);
-  mesh.ENSI_Data_output(output2,20,disp_pp,nn_pp,DIM,&torp,1); 
-  mesh.ENSI_Data_output(output5,21,press_pp,nn_pp,1,&torp,1);
-
-  nlsteps = 1;//12;
+  nlsteps = 3;//12;
   nllimit = 1;//12;
-  double Pressures[5] = {5.000E+03, 12.092E+03, 15.960E+03, 14.932E+03, 5.000E+03};
-  double Strains[5]   = {1.236E-03, 1.218E-03, 8.075E-02, 8.916E-02, 8.399E-02};
-  int LoadStepCounts[5] = {1, 15, 120, 15, 15};
-  for(int Lcases=0; Lcases<1; Lcases++){
+  double Pressures[5]   = {5.000E+03, 12.092E+03, 15.960E+03, 14.932E+03, 5.000E+03};
+  double Strains[5]     = {1.236E-03, 1.218E-03, 8.075E-02, 8.916E-02, 8.399E-02};
+  int LoadStepCounts[5] = {1, 1, 120, 15, 15};
+  for(int Lcases=0; Lcases<nlsteps; Lcases++){
     for(int I=0; I<NEQHeat; I++) astrain0[I]= ((Lcases != 0) ? Strains[Lcases-1] : 0.00);
     for(int I=0; I<NEQHeat; I++) astrain1[I]= Strains[Lcases];
     if(NUMPE==1) cout << " Non-Linear Newton Iterations :" << endl;
-    if(Lcases != 0) pressures0 = Pressures[Lcases-1]*(1.00E-04);
+    pressures0 =  ((Lcases != 0) ?  Pressures[Lcases-1]*(1.00E-04) : 0.00);
     pressures1 = Pressures[Lcases]*(1.00E-04);
     UpdateTStressFunc(Stress0,&pressures0,&NTOTStress,&DIM,&nloaded);  //Simple Update
     UpdateTStressFunc(Stress1,&pressures1,&NTOTStress,&DIM,&nloaded);
@@ -177,16 +162,17 @@ int main(){
         double du_norm = 0.0, R_norm = 0.0;
         solids.Update_LinearSystem(Km_pp,Rm_pp,u_pp,astemp_pp,fibre,Stress,&mesh);
         R_norm = mesh.norm_p(Rm_pp, NEQSolid);
+
         if(mesh.IsItConverged(&R_norm, &nltol)) break;
-/*
+
         //Solve Linear system
         // 1-SSOR, 2-Chol, 3-LDL^T, 4-LU, 5-LDU, 6-ILU preconditioner
         liters=0; lerr=0.0;
         mesh.Set_LsolverPORDER(153);
         mesh.Set_LsolverLIMIT(4);
-        mesh.Set_LsolverSOLVER(4);
+        mesh.Set_LsolverSOLVER(2);
         mesh.Set_LsolverTOL(ltol2);
-        mesh.Solve_LinearSystem(Km_pp,Mmat_pp,du_pp,Rm_pp,&liters,&lerr,&solids,4);*/
+        mesh.Solve_LinearSystem(Km_pp,Mmat_pp,du_pp,Rm_pp,&liters,&lerr,&solids,4);
         du_norm = mesh.norm_p(du_pp, NEQSolid);
 
         //Output some sim stats

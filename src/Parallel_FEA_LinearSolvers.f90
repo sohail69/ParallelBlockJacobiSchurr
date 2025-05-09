@@ -77,8 +77,6 @@ END SUBROUTINE STOP_COND
     d_pp = r_pp
     p_pp  = d_pp;
 
-IF(numpe==1) WRITE(*,*) "CG Solver started"
-
     !-----
     ! Solve Linear system using CG
     !-----

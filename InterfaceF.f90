@@ -790,14 +790,12 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   !Apply Dirchelet boundary conditions using elimination scheme
   !--
   DO IEL = 1,nel_pp
-    DO J = 1,nodU
-      DO I = 1,ndim
-        !IF(gg_pp(M,iel)==0)THEN
-        !  Residual(M,IEL)  = zero;
-         ! StoreKE(M,:,IEL) = zero;
-          !StoreKE(M,M,IEL) = one;
-        !ENDIF
-      ENDDO
+    DO I = 1,ndofU
+      IF(gg_pp(I,iel)==0)THEN
+        Residual(I,IEL)  = zero;
+        StoreKE(I,:,IEL) = zero;
+        StoreKE(I,I,IEL) = one;
+      ENDIF
     ENDDO
   ENDDO
 

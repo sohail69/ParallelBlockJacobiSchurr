@@ -21,22 +21,22 @@ rm -r main_SolidsUPAS
 # Compile the C++ files
 #
 export PARAFEM_DIR="/home/sar-local/X_Software/parafem/"
-mpicxx -std=c++11 -O3 -m64 -c main_SolidsUPAS.cpp
+mpicxx -fopenmp -std=c++11 -O3 -m64 -c main_SolidsUPAS.cpp
 
 #
 # Compile the fortran Interface(s)
 #
-mpif90 -c InterfaceF.f90        -fallow-argument-mismatch   \
-                                -I src/                     \
-                                -I ref_elements/            \
-                                -I $PARAFEM_DIR/include/mpi
+mpif90 -fopenmp -c InterfaceF.f90 -fallow-argument-mismatch   \
+                                  -I src/                     \
+                                  -I ref_elements/            \
+                                  -I $PARAFEM_DIR/include/mpi
 
 #
 # Make the executables
 #
-mpif90 -o main_SolidsUPAS main_SolidsUPAS.o -fallow-argument-mismatch  \
+mpif90 -fopenmp -o main_SolidsUPAS main_SolidsUPAS.o -fallow-argument-mismatch  \
                                             -I src/                    \
-                                           -I $PARAFEM_DIR/include/mpi \
+                                            -I $PARAFEM_DIR/include/mpi \
                                             InterfaceF.o               \
                                             src/Parallel_IO.o                       \
                                             src/Parallel_supplementary_Maths.o      \

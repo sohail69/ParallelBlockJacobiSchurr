@@ -30,15 +30,15 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
   REAL(iwp):: strain, gamma_f, gamma_n, gamma_s
   REAL(iwp):: Fdef(ndim,ndim), Fedef(ndim,ndim), F0def(ndim,ndim), press(nip);
   REAL(iwp):: Cdef(ndim,ndim), F0inv(ndim,ndim), dE(nst,ndofU,nip), d2E(nst,ndofU,ndofU,nip);
-  INTEGER  :: Map(ndim+1,nodU), UMAP(ndim,nodU);
+  INTEGER  :: UMAP(ndim,nodU), MAP(ndim+1,nodU);
 
-  Km     = zero;  Rm      = zero;   dE     = zero;  d2E     = zero;
-  Cdef   = zero;  CdefInv = zero;   Fdef   = zero; C_kkpp   = zero;
-  C_ijkl = zero;  S_ij    = zero;   Fedef  = zero; S_kk     = zero;
+  Km     = zero;  Rm      = zero;   dE     = zero; d2E     = zero;
+  Cdef   = zero;  CdefInv = zero;   Fdef   = zero; C_kkpp  = zero;
+  C_ijkl = zero;  S_ij    = zero;   Fedef  = zero; S_kk    = zero;
   Jac    = zero;  Jacinv  = zero;   det    = zero;
 
   CALL SDF_MAP(Map, nodU, ndim+1)
-  CALL SDF_MAP(UMap, nodU, ndim)
+  UMap = Map(1:ndim,:)
 
   !===
   !
@@ -55,7 +55,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
     DO I=1,ndim
       auxm(I,:) = utemp(Map(I,:),Iel);
     ENDDO
-    pxm = utemp(Map(ndim+1,1:nodP),Iel);
+    pxm = utemp(Map(ndim+1,1:ndofP),Iel);
     S_kk    = zero;
     C_kkpp  = zero;
 
@@ -89,7 +89,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
       Fedef = MATMUL(Fdef,F0Inv)
       Cdef = MATMUL(TRANSPOSE(Fedef),Fedef)
       CALL GREENLAGRANGE_DERIVS_AS(Fedef,F0Inv,dNi_u(:,:,Ig),dE(:,:,Ig),d2E(:,:,:,Ig),UMAP,ndim,ndofU,nodU,nst)
-      CALL INVERT2(Cdef,CdefInv(:,:,Ig),ndim); 
+      CALL INVERT2(Cdef,CdefInv(:,:,Ig),ndim);
       CALL MATMOD_NOH(C_ijkl(:,:,Ig),S_ij(:,Ig),MATPROP,Fedef,ndim,nst,nprop)
 
       ! Calculate the volumetric stress
@@ -121,7 +121,7 @@ SUBROUTINE STATIC_SOLIDUPAS_ELEMENT(Km, Rm, utemp, astrain, fibre, MATPROP   &
           Rm(M,Iel) = Rm(M,Iel) + dE(s,M,Ig)*PK2*det(Ig)*weights(Ig);
           Km(M,1:ndofU,Iel) = Km(M,1:ndofU,Iel) + PK2*d2E(s,:,M,Ig)*det(Ig)*weights(Ig);
           DO t = 1,nst; CALL VOIGHT_ITERATOR(t,K,L,nst)
-            Ctang = C_ijkl(s,t,Ig) - two* press(Ig)*CdefInv(K,I,Ig)*CdefInv(J,L,Ig)
+            Ctang = C_ijkl(s,t,Ig) - two*press(Ig)*CdefInv(K,I,Ig)*CdefInv(J,L,Ig)
             Ctang = Ctang - C_kkpp(Ig)*Kdelta(I,J)*Kdelta(K,L)/three;
             Km(M,1:ndofU,Iel) = Km(M,1:ndofU,Iel) + dE(s,M,Ig)*Ctang*dE(t,:,Ig)*det(Ig)*weights(Ig);
           ENDDO
@@ -191,7 +191,6 @@ SUBROUTINE GREENLAGRANGE_DERIVS_AS(Fdef,F0Inv,dNi,dE,d2E,Map,ndim,ntots,nod,nst)
   RETURN
 ENDSUBROUTINE GREENLAGRANGE_DERIVS_AS
 
-
 !-------------------------------
 ! Neo-Hookean
 !-------------------------------
@@ -206,11 +205,8 @@ SUBROUTINE MATMOD_NOH(C_ijkl,S_ij,Matprops,Fdef,ndim,nst,nprop)
 
    J3    = determinant(Fdef)
    LJ3   = DLOG(J3)
-!   Y     = Matprops(1); !1.00_iwp    !
-!   nu    = Matprops(2); !0.49999_iwp !
-   Y     = 1.00_iwp;
-   nu    = 0.49999_iwp;
-
+   Y     = 1.00_iwp;    !   Y     = Matprops(1); !1.00_iwp    !
+   nu    = 0.49999_iwp; !   nu    = Matprops(2); !0.49999_iwp !
    mu    = (4.6_iwp/2.2_iwp)/(Y/(2._iwp+2._iwp*nu))
    lmbda = Y*nu/((1+nu)*(1._iwp-2._iwp*nu))
    Cdef = MATMUL(TRANSPOSE(Fdef),Fdef)
@@ -235,7 +231,7 @@ SUBROUTINE SDF_MAP(Map, nod, ndim)
 
   DO I = 1,ndim
     DO J = 1,nod
-      Map(I,J) = (J-1)*ndim + I;
+      Map(I,J) = (I-1)*nod + J;
     ENDDO
   ENDDO
   RETURN
