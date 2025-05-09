@@ -2,6 +2,7 @@ MODULE Parallel_supplementary_Maths
   USE precision;      USE global_variables;
   USE maths;          USE gather_scatter;
   USE new_library;    USE MP_INTERFACE;
+  USE OMP_LIB;
   IMPLICIT NONE
   CONTAINS
 !*> Additional supplementary routines for calculation purposes
@@ -12,6 +13,101 @@ MODULE Parallel_supplementary_Maths
 !by assuming a 1-DOF reference field has nod*nels_pp nodal element
 !freedoms and nn_pp global nodal freedoms. Dirchelet boundary conditions
 !and special elements are handled by matrix elimination 
+
+!-------------------------------
+! Parafem Thread Partitioning
+!-------------------------------
+!
+! Smallest partitionSize
+!
+PURE FUNCTION PARTITION_SIZE(threadID, nthreads, nsize) RESULT(psize)
+  INTEGER,   INTENT(IN) :: threadID, nthreads, nsize
+  INTEGER               :: psize
+
+  psize = nsize/nthreads
+END FUNCTION PARTITION_SIZE
+
+!
+! calculate remainder
+!
+PURE FUNCTION REMAINDER_CALC(threadID, nthreads, nsize) RESULT(tremainder)
+  INTEGER,   INTENT(IN) :: threadID, nthreads, nsize
+  INTEGER               :: tremainder
+
+  tremainder = nsize - nthreads*PARTITION_SIZE(threadID, nthreads, nsize);
+END FUNCTION REMAINDER_CALC
+
+!
+! First iterator
+!
+PURE FUNCTION ITERATOR_START(threadID, nthreads, nsize) RESULT(tnstart)
+  INTEGER,   INTENT(IN) :: threadID, nthreads, nsize
+  INTEGER               :: tnstart
+
+  IF(REMAINDER_CALC(threadID, nthreads, nsize) /= 0)THEN
+    IF(threadID < REMAINDER_CALC(threadID, nthreads, nsize) )THEN
+      tnstart = threadID*(PARTITION_SIZE(threadID, nthreads, nsize)+1) + 1;
+    ELSE
+      tnstart = threadID*PARTITION_SIZE(threadID, nthreads, nsize) + REMAINDER_CALC(threadID, nthreads, nsize) + 1;
+    ENDIF
+  ELSE
+    tnstart = threadID*PARTITION_SIZE(threadID, nthreads, nsize) + 1;
+  ENDIF
+END FUNCTION ITERATOR_START
+
+!
+! Last iterator
+!
+PURE FUNCTION ITERATOR_END(threadID, nthreads, nsize) RESULT(tnend)
+  INTEGER,   INTENT(IN) :: threadID, nthreads, nsize
+  INTEGER               :: tnend
+
+  IF(REMAINDER_CALC(threadID, nthreads, nsize) /= 0)THEN
+    IF(threadID < REMAINDER_CALC(threadID, nthreads, nsize) )THEN
+      tnend = (threadID+1)*(PARTITION_SIZE(threadID, nthreads, nsize)+1);
+    ELSE
+      tnend = (threadID+1)*PARTITION_SIZE(threadID, nthreads, nsize) + REMAINDER_CALC(threadID, nthreads, nsize);
+    ENDIF
+  ELSE
+    tnend = (threadID+1)*PARTITION_SIZE(threadID, nthreads, nsize);
+  ENDIF
+END FUNCTION ITERATOR_END
+
+
+!-------------------------------
+! Parafem vector parallel dot product
+!-------------------------------
+FUNCTION DOT_PRODUCT_P2(vectora, vectorb, neqs_pp)  RESULT(dot_product_p)
+  REAL(iwp), INTENT(IN) :: vectora(:), vectorb(:)
+  INTEGER,   INTENT(IN) :: neqs_pp
+  INTEGER               :: I;                 !OpenMP stuff
+  INTEGER               :: bufsize, ier       !MPI Stuff
+  REAL(iwp)             :: l_product, tl_product, dot_product_p
+  INTEGER               :: nthreads, threadID, tnstart, tnend; !OpenMP stuff
+
+   l_product = 0._iwp;
+   !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(I, threadID, nthreads, tnstart, tnend, tl_product)
+   threadID = OMP_GET_THREAD_NUM();
+   nthreads = OMP_GET_MAX_THREADS();
+   tnstart  = ITERATOR_START(threadID, nthreads, neqs_pp)
+   tnend    =   ITERATOR_END(threadID, nthreads, neqs_pp) 
+
+    tl_product = 0._iwp
+    DO I = tnstart,tnend
+      tl_product = tl_product + vectora(I)*vectorb(I)
+    ENDDO
+
+   !$OMP CRITICAL
+    l_product = l_product + tl_product;
+   !$OMP END CRITICAL
+
+   !$OMP BARRIER
+   !$OMP END PARALLEL
+
+  bufsize = 1
+  dot_product_p = 0._iwp;
+  CALL MPI_ALLREDUCE(l_product,dot_product_p,bufsize,MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,ier)
+END FUNCTION DOT_PRODUCT_P2
 
 
 !-------------------------------
@@ -26,13 +122,24 @@ SUBROUTINE PARAMATVECT(storA,x,b,pmul,qmul,MASK,nel,nn_pp,neqs_pp,ntots,nod,nodo
    REAL(iwp), INTENT(INOUT):: pmul(ntots,nel), qmul(ntots,nel);
    REAL(iwp), INTENT(INOUT):: b(neqs_pp)
    REAL(iwp), PARAMETER    :: zero = 0._iwp, one = 1._iwp;
+   INTEGER                 :: nthreads, threadID, tnstart, tnend; !OpenMP stuff
 
    pmul = zero;
    qmul = zero;
-   CALL GATHERM(x, pmul, MASK, ntots, nodof, nod, nel, neqs_pp, nn_pp) 
-   DO iel = 1,nel
+   CALL GATHERM(x, pmul, MASK, ntots, nodof, nod, nel, neqs_pp, nn_pp)
+
+   !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(Iel, threadID, nthreads, tnstart, tnend)
+   threadID = OMP_GET_THREAD_NUM();
+   nthreads = OMP_GET_MAX_THREADS();
+   tnstart = ITERATOR_START(threadID, nthreads, nel)
+   tnend   =   ITERATOR_END(threadID, nthreads, nel) 
+
+   DO iel = tnstart, tnend
       qmul(:,iel) = MATMUL(TRANSPOSE(storA(:,:,iel)),pmul(:,iel))
    ENDDO
+   !$OMP BARRIER
+   !$OMP END PARALLEL
+
    b = zero;
    CALL SCATTERM(b, qmul, MASK, ntots, nodof, nod, nel, neqs_pp, nn_pp)
    RETURN
@@ -50,13 +157,22 @@ SUBROUTINE PARAMATVEC(storA,x,b,pmul,qmul,MASK,nel,nn_pp,neqs_pp,ntots,nod,nodof
    REAL(iwp), INTENT(INOUT):: pmul(ntots,nel), qmul(ntots,nel);
    REAL(iwp), INTENT(INOUT):: b(neqs_pp)
    REAL(iwp), PARAMETER    :: zero = 0._iwp, one = 1._iwp;
+   INTEGER                 :: nthreads, threadID, tnstart, tnend; !OpenMP stuff
 
    pmul = zero;
    qmul = zero;
    CALL GATHERM(x, pmul, MASK, ntots, nodof, nod, nel, neqs_pp, nn_pp) 
-   DO iel = 1,nel
+   !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(Iel, threadID, nthreads, tnstart, tnend)
+   threadID = OMP_GET_THREAD_NUM();
+   nthreads = OMP_GET_MAX_THREADS();
+   tnstart = ITERATOR_START(threadID, nthreads, nel)
+   tnend   = ITERATOR_END(threadID, nthreads, nel) 
+
+   DO iel = tnstart, tnend
       qmul(:,iel) = MATMUL(storA(:,:,iel),pmul(:,iel))
    ENDDO
+   !$OMP BARRIER
+   !$OMP END PARALLEL
    b = zero;
    CALL SCATTERM(b, qmul, MASK, ntots, nodof, nod, nel, neqs_pp, nn_pp)
    RETURN
