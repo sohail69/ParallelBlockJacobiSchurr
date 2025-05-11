@@ -655,14 +655,13 @@ END SUBROUTINE CalcHeatMasks
 !-------------------------------
 SUBROUTINE CalcSolidsMasks(SolidsMask, nod, nodof)
   IMPLICIT NONE
-  INTEGER               :: i, j, k, l;
+  INTEGER               :: I, J;
   INTEGER, INTENT(IN)   :: nod, nodof;
   INTEGER, INTENT(INOUT):: SolidsMask(nodof,nod);
-  l=0;
+
   DO I = 1,nodof
     DO J = 1,nod
-      l = l + 1;
-      SolidsMask(I,J) = l;
+      SolidsMask(I,J) = (I-1)*nod + J;
     ENDDO
   ENDDO
   RETURN
@@ -733,7 +732,8 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   REAL(iwp),       ALLOCATABLE:: dNi_u(:,:,:), Ni_u(:,:), Ni_p(:,:)
   INTEGER                     :: ndofU, ndofP, nodU, nodP, nodofP, nodofU;
   REAL(iwp)                   :: cx, cy, cr, ctol, rad0, rad1; !Rotation test
-
+  INTEGER                     :: MAP(ndim+1,nodMax), UMAP(ndim,nodMax)
+  INTEGER                     :: nthreads, threadID, tnstart, tnend;
 
   ! Though the maps in this first component can technically be stored
   ! and reused in the context again later of the shear number of elements
@@ -769,12 +769,34 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
     CALL SHAPE_FUN(Ni_p(:,I),points,I)
   ENDDO
 
+  CALL SDF_MAP(Map, nodU, ndim+1)
+  UMap = Map(1:ndim,:)
+
+
+
+  StoreKE=zero
+  Residual=zero
+
   !---
   ! Element integration routines
   !---
-  CALL STATIC_SOLIDUPAS_ELEMENT(StoreKE, Residual, utemp, astrain, fibre, MATPROP &
-                              , coord, Ni_p, dNi_u, Ni_u, weights, nprop, nel_pp  &
-                              , ntots, ndofU, ndofP, ndim , nst, nip, nodU, nodp)
+  !$OMP PARALLEL DEFAULT(SHARED) &
+  !$OMP PRIVATE(Iel, nthreads, threadID, tnstart, tnend)
+  threadID = OMP_GET_THREAD_NUM();
+  nthreads = OMP_GET_MAX_THREADS();
+  tnstart  = ITERATOR_START(threadID, nthreads, nel_pp);
+  tnend    = ITERATOR_END(threadID, nthreads, nel_pp);
+
+WRITE(*,*) (threadID+1), "Of n-threads: ", nthreads, "start and end iters:", tnstart, tnend
+
+  ! Integrate the Mixed solid
+  ! mechanics element
+  DO Iel = tnstart,tnend
+    CALL STATIC_SOLIDUPAS_ELEMENT(StoreKE(:,:,Iel), Residual(:,Iel), utemp(:,Iel), astrain(:,Iel), fibre(:,:,Iel) &
+                                , MATPROP, coord(:,:,Iel), Ni_p, dNi_u, Ni_u, weights, nprop, ntots, ndofU, ndofP &
+                                , ndim , nst, nip, nodU, nodp, MAP, UMAP)
+  ENDDO
+  !$OMP END PARALLEL
 
   !--
   !Apply Traction boundary conditions using surface elements

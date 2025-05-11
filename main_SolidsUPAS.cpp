@@ -167,6 +167,7 @@ int main(){
 
         //Solve Linear system
         // 1-SSOR, 2-Chol, 3-LDL^T, 4-LU, 5-LDU, 6-ILU preconditioner
+/*
         liters=0; lerr=0.0;
         mesh.Set_LsolverPORDER(153);
         mesh.Set_LsolverLIMIT(4);
@@ -180,6 +181,7 @@ int main(){
                           << setw(8)  << NIters  << setw(8)  << liters
                           << setw(14) << du_norm << setw(14) << R_norm
                           << setw(14) << lerr    << endl;
+*/
         mesh.Increment(u_pp,u_pp,du_pp,&one,&mone,&NEQSolid);
       }//NewtonSteps
 
