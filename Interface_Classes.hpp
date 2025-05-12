@@ -506,6 +506,15 @@ class Solid_problemUP: public Problem{
       delete[] boundary_N;
     };
 
+    void Read_Set_ConstraintBCs(char argv[50], int nbnd, Mesh *mesh){
+      nConstraint = nbnd;
+      if(gg_Constr==NULL) gg_Constr = new int[ndofU*nels_pp];
+      int *boundary_N = new int[nConstraint*(nodofU+1)];
+      mesh->Read_BCs(argv, boundary_N, nConstraint, nodofU);
+      mesh->Find_BoundaryNodes(gg_Constr, boundary_N, &nbnd, &ndofU, &nodofU);
+      delete[] boundary_N;
+    };
+
     //Finalise solver
     void Finalise(){
       if(gg_pp    != NULL) delete[] gg_pp;
