@@ -411,13 +411,13 @@ class Heat_problem: public Problem{
 template <typename MESH>
 class Solid_problemUP: public Problem{
   private:
-    int nTract, nDirch;
+    int nTract, nDirch, nConstraint;
     int nFace, nodof, nodofU, nels_pp, nprop=2;
     int nmask=0, ntots=0, ndofU=0, neq_pp=0, nr=0;
 
     double *matprops, *val_pp;
   public:
-    int *gg_pp, *gg_Face, *MASK;
+    int *gg_pp, *gg_Face, *gg_Constr, *MASK;
     int nst=0, nloadedFace=0;
 
     Solid_problemUP(MESH *mesh, int mat){
