@@ -85,8 +85,8 @@ SUBROUTINE SMOOTHED_NO_ROTATION_BC1(Km_mat, Rm_vec, utemp, gg_coord, gg_Constr &
         ! No-rotation boundary condition
         !
         pi_rot  =  (cx + ux)*ux - (cy + uy)*uy;
-		rx_rot  =  (cx + two*ux);
-		ry_rot  = -(cy + two*uy);
+        rx_rot  =  (cx + two*ux);
+        ry_rot  = -(cy + two*uy);
 
         rrot_x  = rx_rot*pi_rot;
         rrot_y  = ry_rot*pi_rot;
