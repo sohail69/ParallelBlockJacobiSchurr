@@ -787,8 +787,6 @@ SUBROUTINE SOLID_Integration_UP(Residual, StoreKE, utemp, astrain, fibre        
   tnstart  = ITERATOR_START(threadID, nthreads, nel_pp);
   tnend    = ITERATOR_END(threadID, nthreads, nel_pp);
 
-WRITE(*,*) (threadID+1), "Of n-threads: ", nthreads, "start and end iters:", tnstart, tnend
-
   ! Integrate the Mixed solid
   ! mechanics element
   DO Iel = tnstart,tnend
@@ -802,10 +800,10 @@ WRITE(*,*) (threadID+1), "Of n-threads: ", nthreads, "start and end iters:", tns
   !Apply Traction boundary conditions using surface elements
   !--
   IF(nloadedFace /= 0)THEN
-  !  CALL SOLID_Traction_element(Residual, StoreKE, Element, coord, Stress, utemp &
-  !                            , disp_MAP, gg_Face, nloadedFace, ndim, nodMax     &
-  !                            , ntots, ndofU, nodU, nst, nFace, nodFace, nipFace &
-  !                            , nip2, nel_pp)
+    CALL SOLID_Traction_element(Residual, StoreKE, Element, coord, Stress, utemp &
+                              , UMap, gg_Face, nloadedFace, ndim, nodMax     &
+                              , ntots, ndofU, nodU, nst, nFace, nodFace, nipFace &
+                              , nip, nel_pp)
   ENDIF
 
   !--
@@ -816,6 +814,7 @@ WRITE(*,*) (threadID+1), "Of n-threads: ", nthreads, "start and end iters:", tns
       IF(gg_pp(I,iel)==0)THEN
         Residual(I,IEL)  = zero;
         StoreKE(I,:,IEL) = zero;
+        StoreKE(:,I,IEL) = zero;
         StoreKE(I,I,IEL) = one;
       ENDIF
     ENDDO

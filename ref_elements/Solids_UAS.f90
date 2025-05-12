@@ -60,8 +60,8 @@ SUBROUTINE SOLID_UAS_ELM(Km, Rm, utemp, gama, fibre, MATPROP   &
     ENDDO
     CALL INVERT2(F0def,F0inv,ndim)
 
-   ! Calculate the standard
-   ! displacement component
+    ! Calculate the standard
+    ! displacement component
     Fdef = zero;
     DO I = 1,ndim
       DO J = 1,ndim
