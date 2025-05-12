@@ -3,174 +3,60 @@ MODULE Parallel_BoundaryConditions
   USE maths;          USE new_library;
   USE MP_INTERFACE;   USE gather_scatter;
   CONTAINS
+
 !-------------------------------
 ! Apply 3-D No-rotation BC for XY-plane with radius smoothing
 !-------------------------------
-SUBROUTINE SMOOTHED_NO_ROTATION_BC(Km_mat, Rm_vec, utemp, dutemp, gg_coord, gg_pp &
-                                     , centre, rad0, disp_MAP, ntots, ndim, nod, nel_pp)
+SUBROUTINE SMOOTHED_NO_ROTATION_BC1(Km_mat, Rm_vec, utemp, gg_coord, gg_Constr &
+                                     , centre, disp_MAP, ntots, ndim, nod, nel_pp)
   IMPLICIT NONE
-  INTEGER                  :: Iel, Inode, I, J, K, L;
+  INTEGER                  :: Iel, Inode, I, J, K, L, M;
   INTEGER,   INTENT(IN)    :: ntots, ndim, nod, nel_pp;
-  INTEGER,   INTENT(IN)    :: disp_MAP(nod*ndim), gg_pp(nod*ndim,nel_pp);
-  REAL(iwp), INTENT(IN)    :: rad0, centre(ndim), dutemp(ntots,nel_pp);
+  INTEGER,   INTENT(IN)    :: disp_MAP(nod*ndim), gg_Constr(nod*ndim,nel_pp);
+  REAL(iwp), INTENT(IN)    :: centre(ndim);
   REAL(iwp), INTENT(IN)    :: gg_coord(nod,ndim,nel_pp), utemp(ntots,nel_pp);
   REAL(iwp), INTENT(INOUT) :: Km_mat(ntots,ntots,nel_pp), Rm_vec(ntots,nel_pp);
   REAL(iwp), PARAMETER     :: zero=0._iwp, one=1._iwp, two = 2._iwp;
-  REAL(iwp), PARAMETER     :: tol=1.0E-03_iwp;
-  REAL(iwp)                :: cx, cy, ux, uy, dux, duy;
-  REAL(iwp)                :: CR2_avg, r_accum, N_nodes;
-  REAL(iwp)                :: rx, ry, rx0, ry0, rx_rot, ry_rot;
-  REAL(iwp)                :: Jxx, Jxy, Jyx, Jyy
-  REAL(iwp)                :: Kx_vec(ntots), Ky_vec(ntots);
-  REAL(iwp)                :: Kx0_vec(ntots), Ky0_vec(ntots);
+  REAL(iwp), PARAMETER     :: tol=1.0E-02_iwp;
+  REAL(iwp)                :: cx, cy, ux, uy, penalty;
+  REAL(iwp)                :: alpha, ri, r_avg, r2_accum, N_nodes;
+  REAL(iwp)                :: rx, ry, Jxx, Jxy, Jyx, Jyy;
+  REAL(iwp)                :: rx0, ry0, Jxx0, Jxy0, Jyx0, Jyy0;
+  REAL(iwp)                :: rs_x, rs_y, rrot_x, rrot_y;
+  REAL(iwp)                :: Js_xx, Js_xy, Js_yx, Js_yy;
+  REAL(iwp)                :: Jrot_xx, Jrot_xy, Jrot_yx, Jrot_yy;
+  REAL(iwp)                :: pi_rot, rx_rot, ry_rot;
+  REAL(iwp)                :: pi_s, rx_s, ry_s;
 
   !
   ! Calculate the average radius
   !
-  r_accum = zero;
-  N_nodes = zero;
+  r2_accum = zero;
+  N_nodes  = zero;
+  M = 0;
   DO Iel = 1,nel_pp
     DO Inode = 1,nod
       L = Inode*ndim;
-      IF(gg_pp(L,iel) == 0)THEN
+      IF(gg_Constr(L,iel) == 0)THEN
         !
         ! Find position relative to centre of rotation
         !
         cx = gg_coord(Inode,1,Iel) - centre(1);
         cy = gg_coord(Inode,2,Iel) - centre(2);
+        K  = ndim*(Inode-1);
+        I  = disp_MAP(K+1); 
+        J  = disp_MAP(K+2);
+        ux = utemp(I,Iel)
+        uy = utemp(J,Iel)
 
-        IF(DABS(cx*cx + cy*cy - rad0*rad0) < tol)THEN
-          K  = ndim*(Inode-1);
-          I  = disp_MAP(K+1); 
-          J  = disp_MAP(K+2);
-          ux = utemp(I,Iel)
-          uy = utemp(J,Iel)
-          dux = dutemp(I,Iel)
-          duy = dutemp(J,Iel)
-          r_accum = r_accum + (cx + ux + dux)*(cx + ux + dux) + (cy + uy + duy)*(cy + uy + duy);
-          N_nodes = N_nodes + one;
-        ENDIF
+        r2_accum =  r2_accum + DSQRT((cx+ux)*(cx+ux) + (cy+uy)*(cy+uy));
+        N_nodes  = N_nodes + one;
       ENDIF
     ENDDO
   ENDDO
-  CALL MPI_ALLREDUCE(r_accum,r_accum,1,MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,ier);
   CALL MPI_ALLREDUCE(N_nodes,N_nodes,1,MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,ier);
-  CR2_avg = r_accum/N_nodes;
-
-
-  !
-  ! Apply the Boundary conditions
-  !
-  DO Iel = 1,nel_pp
-    DO Inode = 1,nod
-      L = Inode*ndim;
-      IF(gg_pp(L,Iel) == 0)THEN
-        cx = gg_coord(Inode,1,Iel) - centre(1);
-        cy = gg_coord(Inode,2,Iel) - centre(2);
-
-        IF(DABS(cx*cx + cy*cy - rad0*rad0) < tol)THEN
-          K  = ndim*(Inode-1);
-          I  = disp_MAP(K+1); 
-          J  = disp_MAP(K+2);
-
-          dux = dutemp(I,Iel)
-          duy = dutemp(J,Iel)
-
-          ux = utemp(I,Iel);
-          uy = utemp(J,Iel);
-
-          rx0 = Rm_vec(I,Iel);
-          ry0 = Rm_vec(J,Iel);
-
-          Kx0_vec(:) = Km_mat(I,:,Iel)
-          Ky0_vec(:) = Km_mat(J,:,Iel)
-
-          rx_rot = cx*cx*CR2_avg - ( (cx+ux+dux)*(cx+ux+dux)*(cx*cx + cy*cy) )
-          ry_rot = cy*cy*CR2_avg - ( (cy+uy+duy)*(cy+uy+duy)*(cx*cx + cy*cy) ) 
-
-          rx  = (one + rx0)*rx_rot + rx0;
-          ry  = (one + ry0)*ry_rot + ry0;
-
-          Jxx = two*( (cx*cx/N_nodes)- (cx*cx + cy*cy) )*(cx + ux + dux)
-          Jxy = two*(cx*cx/N_nodes)*(cy + uy + duy)
-          Jyx = two*(cy*cy/N_nodes)*(cx + ux + dux)
-          Jyy = two*( (cy*cy/N_nodes)- (cx*cx + cy*cy) )*(cy + uy + duy)
-
-          Kx_vec    = Kx0_vec*(rx_rot + one);
-          Kx_vec(I) = Kx_vec(I) + (one + rx0)*Jxx
-          Kx_vec(J) = Kx_vec(J) + (one + rx0)*Jxy
-
-          Ky_vec     = Ky0_vec*(ry_rot + one);
-          Ky_vec(I) = Ky_vec(I) + (one + ry0)*Jyx
-          Ky_vec(J) = Ky_vec(J) + (one + ry0)*Jyy
-
-          Rm_vec(I,Iel)   = rx;
-          Rm_vec(J,Iel)   = ry;
-          Km_mat(I,:,Iel) = Kx_vec
-          Km_mat(J,:,Iel) = Ky_vec
-        ENDIF
-      ENDIF
-    ENDDO
-  ENDDO
-
-  RETURN
-ENDSUBROUTINE SMOOTHED_NO_ROTATION_BC
-
-!-------------------------------
-! Apply 3-D No-rotation BC for XY-plane with radius smoothing
-!-------------------------------
-SUBROUTINE RSMOOTHED_NO_ROTATION_BC_XY(Km_mat, Rm_vec, utemp, gg_coord, gg_pp &
-                                     , centre, rad0, disp_MAP, ntots, ndim, nod, nel_pp)
-  IMPLICIT NONE
-  INTEGER                  :: Iel, Inode, I, J, K, L;
-  INTEGER,   INTENT(IN)    :: ntots, ndim, nod, nel_pp;
-  INTEGER,   INTENT(IN)    :: disp_MAP(nod*ndim), gg_pp(nod*ndim,nel_pp);
-  REAL(iwp), INTENT(IN)    :: rad0, centre(ndim);
-  REAL(iwp), INTENT(IN)    :: gg_coord(nod,ndim,nel_pp), utemp(ntots,nel_pp);
-  REAL(iwp), INTENT(INOUT) :: Km_mat(ntots,ntots,nel_pp), Rm_vec(ntots,nel_pp);
-  REAL(iwp), PARAMETER     :: zero=0._iwp, one=1._iwp, two = 2._iwp;
-  REAL(iwp), PARAMETER     :: three = 3._iwp, four = 4._iwp, six = 6._iwp;
-  REAL(iwp), PARAMETER     :: tol=1.0E-03_iwp;
-  REAL(iwp)                :: cx, cy, ux, uy;
-  REAL(iwp)                :: Bx, By, r, r_avg, G, A, N, sqrG, sqrA, sqrN;
-  REAL(iwp)                :: rx, ry, Jxx, Jxy, Jyy;
-  REAL(iwp)                :: F1, F2, F3, Ftemp1, Ftemp2, Ftemp3;
-
-  !
-  ! Calculate the average radius
-  !
-  N = zero;
-  A = zero;
-  DO Iel = 1,nel_pp
-    DO Inode = 1,nod
-      L = Inode*ndim;
-      IF(gg_pp(L,iel) == 0)THEN
-        !
-        ! Find position relative to centre of rotation
-        !
-        cx = gg_coord(Inode,1,Iel) - centre(1);
-        cy = gg_coord(Inode,2,Iel) - centre(2);
-        r = DSQRT(cx*cx + cy*cy);
-
-        IF(DABS(r - rad0) < tol)THEN
-          K  = ndim*(Inode-1);
-          I  = disp_MAP(K+1); 
-          J  = disp_MAP(K+2);
-
-          Bx = gg_coord(Inode,1,Iel) + utemp(I,Iel) - centre(1);
-          By = gg_coord(Inode,2,Iel) + utemp(J,Iel) - centre(2);
-
-          A = A + (Bx*Bx + By*By)
-          N = N + one;
-        ENDIF
-      ENDIF
-    ENDDO
-  ENDDO
-  CALL MPI_ALLREDUCE(A,A,1,MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,ier);
-  CALL MPI_ALLREDUCE(N,N,1,MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,ier);
-  sqrN  = DSQRT(N);
-  sqrA  = DSQRT(A);
-  r_avg = sqrA/sqrN;
+  CALL MPI_ALLREDUCE(r2_accum,r2_accum,1,MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,ier);
+  r_avg = DSQRT(r2_accum/N_nodes);
 
   !
   ! Apply the Boundary conditions
@@ -178,78 +64,79 @@ SUBROUTINE RSMOOTHED_NO_ROTATION_BC_XY(Km_mat, Rm_vec, utemp, gg_coord, gg_pp &
   DO Iel = 1,nel_pp
     DO Inode = 1,nod
       L = Inode*ndim;
-      IF(gg_pp(L,Iel) == 0)THEN
-        !
-        ! Find position relative to centre of rotation
-        !
+      IF(gg_Constr(L,Iel) == 0)THEN
         cx = gg_coord(Inode,1,Iel) - centre(1);
         cy = gg_coord(Inode,2,Iel) - centre(2);
-        r = DSQRT(cx*cx + cy*cy);
 
-        IF(DABS(r - rad0) < tol)THEN
-          !
-          ! Map displacements and residuals
-          !
-          K  = ndim*(Inode-1);
-          I  = disp_MAP(K+1);
-          J  = disp_MAP(K+2);
-          ux = utemp(I,Iel);
-          uy = utemp(J,Iel);
+        K  = ndim*(Inode-1);
+        I  = disp_MAP(K+1); 
+        J  = disp_MAP(K+2);
 
-          !
-          ! Build No-XY-rotation BC
-          !
-          rx =  -four*cy*(cx*uy - cy*ux)*(cx*uy - cy*ux)*(cx*uy - cy*ux);
-          ry =   four*cx*(cx*uy - cy*ux)*(cx*uy - cy*ux)*(cx*uy - cy*ux);
+        ux   = utemp(I,Iel);
+        uy   = utemp(J,Iel);
+        rx0  = Rm_vec(I,Iel);
+        ry0  = Rm_vec(J,Iel);
+        Jxx0 = Km_mat(I,I,Iel);
+        Jxy0 = Km_mat(I,J,Iel);
+        Jyx0 = Km_mat(J,I,Iel);
+        Jyy0 = Km_mat(J,J,Iel);
 
-          Jxx =  two*six*cy*cy*(cx*uy - cy*ux)*(cx*uy - cy*ux);
-          Jxy = -two*six*cy*cx*(cx*uy - cy*ux)*(cx*uy - cy*ux);
-          Jyy =  two*six*cx*cx*(cx*uy - cy*ux)*(cx*uy - cy*ux);
+        !
+        ! No-rotation boundary condition
+        !
+        pi_rot  =  (cx + ux)*ux - (cy + uy)*uy;
+		rx_rot  =  (cx + two*ux);
+		ry_rot  = -(cy + two*uy);
 
-          Rm_vec(I,Iel)   = Rm_vec(I,Iel)   + rx;
-          Km_mat(I,I,Iel) = Km_mat(I,I,Iel) + Jxx;
-          Km_mat(I,J,Iel) = Km_mat(I,J,Iel) + Jxy;
+        rrot_x  = rx_rot*pi_rot;
+        rrot_y  = ry_rot*pi_rot;
 
-          Rm_vec(J,Iel)   = Rm_vec(J,Iel)   + ry;
-          Km_mat(J,I,Iel) = Km_mat(J,I,Iel) + Jxy;
-          Km_mat(J,J,Iel) = Km_mat(J,J,Iel) + Jyy;
+        Jrot_xx = two*rx_rot*rx_rot + two*two*pi_rot;
+        Jrot_xy = rx_rot*ry_rot;
+        Jrot_yx = ry_rot*rx_rot;
+        Jrot_yy = two*ry_rot*ry_rot - two*two*pi_rot;
 
-          !
-          ! Build Average-Radius-smoothing BC
-          !
-          Bx   = gg_coord(Inode,1,Iel) + ux - centre(1);
-          By   = gg_coord(Inode,2,Iel) + uy - centre(2);
-          G    = Bx*Bx + By*By;
-          sqrG = DSQRT(G);
+        !
+        ! Radial averaging boundary condition
+        !
+        ri   = DSQRT((cx+ux)*(cx+ux) + (cy+uy)*(cy+uy));
+        pi_s = (r_avg - ri);
+        rx_s = (cx+ux)/(r_avg*N_nodes) - (cx+ux)/(ri);
+        ry_s = (cy+uy)/(r_avg*N_nodes) - (cy+uy)/(ri);
 
-          Ftemp1 =  (r_avg - r);
-          Ftemp2 =  (one/(sqrA*sqrN) - one/(sqrG));
-          Ftemp3 = -(one/(A*sqrA*sqrN) - one/(G*sqrG));
- 
-          F1 = two*Ftemp2*Ftemp2;
-          F2 = two*Ftemp3*Ftemp1;
-          F3 = two*Ftemp1*Ftemp2;
+        rs_x = zero; !two*pi_s*rx_s;
+        rs_y = zero; !two*pi_s*ry_s;
 
-          rx = F1*F2*Bx;
-          ry = F1*F2*By;
+       ! Js_xx = two*pi_s*() + two*rx_s*rx_s;
+       ! Js_xy = zero;
+       ! Js_yx = zero;
+       ! Js_yy = two*pi_s*() + two*rx_s*rx_s;;
 
-          Jxx = (F1 + F2)*Bx*Bx + F3;
-          Jxy = (F1 + F2)*Bx*By;
-          Jyy = (F1 + F2)*By*By + F3;
 
-          Rm_vec(I,Iel)   = Rm_vec(I,Iel)   + rx;
-          Km_mat(I,I,Iel) = Km_mat(I,I,Iel) + Jxx;
-          Km_mat(I,J,Iel) = Km_mat(I,J,Iel) + Jxy;
+        !
+        ! Add on the BC penalty parameters
+        !
+        penalty = 7.00_iwp;
+        rx  = rx0 + penalty*(rs_x + rrot_x);
+        ry  = ry0 + penalty*(rs_y + rrot_y);
 
-          Rm_vec(J,Iel)   = Rm_vec(J,Iel)   + ry;
-          Km_mat(J,I,Iel) = Km_mat(J,I,Iel) + Jxy;
-          Km_mat(J,J,Iel) = Km_mat(J,J,Iel) + Jyy;
-        ENDIF
+        Jxx = Jxx0 + penalty*(Js_xx + Jrot_xx);
+        Jxy = Jxy0 + penalty*(Js_xy + Jrot_xy);
+        Jyx = Jyx0 + penalty*(Js_yx + Jrot_yx);
+        Jyy = Jyy0 + penalty*(Js_yy + Jrot_yy);
+
+        Rm_vec(I,Iel)   = rx;
+        Rm_vec(J,Iel)   = ry;
+        Km_mat(I,I,Iel) = Jxx;
+        Km_mat(I,J,Iel) = Jxy;
+        Km_mat(J,I,Iel) = Jyx;
+        Km_mat(J,J,Iel) = Jyy;
       ENDIF
     ENDDO
   ENDDO
+
   RETURN
-ENDSUBROUTINE RSMOOTHED_NO_ROTATION_BC_XY
+ENDSUBROUTINE SMOOTHED_NO_ROTATION_BC1
 
 !-------------------------------
 ! Detects local boundary Face elements and returns Face steering array
