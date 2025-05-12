@@ -9,6 +9,7 @@
 #
 
 clear
+export PARAFEM_DIR="/home/sar-local/X_Software/parafem/"
 cd src
 sh ./compile.bash
 cd ..
@@ -20,7 +21,6 @@ rm -r main_SolidsUPAS
 #
 # Compile the C++ files
 #
-export PARAFEM_DIR="/home/sar-local/X_Software/parafem/"
 mpicxx -fopenmp -std=c++11 -O3 -m64 -c main_SolidsUPAS.cpp
 
 #

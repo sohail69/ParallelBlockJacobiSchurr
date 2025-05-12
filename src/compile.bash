@@ -10,13 +10,11 @@
 
 # Clear the object and module files
 #
-clear
 rm -r *.o *.mod
 
 
 ## Build the object Files
 ##
-export PARAFEM_DIR="/home/sar-local/X_Software/parafem/"
 mpif90 -c Parallel_supplementary_Maths.f90    -fallow-argument-mismatch  \
                                               -I $PARAFEM_DIR/include/mpi
 mpif90 -c Parallel_IO.f90                     -fallow-argument-mismatch  \

@@ -107,10 +107,10 @@ SUBROUTINE SMOOTHED_NO_ROTATION_BC1(Km_mat, Rm_vec, utemp, gg_coord, gg_Constr &
         rs_x = zero; !two*pi_s*rx_s;
         rs_y = zero; !two*pi_s*ry_s;
 
-        Js_xx = two*pi_s*() + two*rx_s*rx_s;
+        Js_xx = one !two*pi_s*() + two*rx_s*rx_s;
         Js_xy = zero;
         Js_yx = zero;
-        Js_yy = two*pi_s*() + two*rx_s*rx_s;;
+        Js_yy = one !two*pi_s*() + two*rx_s*rx_s;;
 
         !
         ! Add on the BC penalty parameters

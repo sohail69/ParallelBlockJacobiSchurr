@@ -2,7 +2,6 @@ MODULE Solids_UPAS
   USE precision;
   USE Parallel_supplementary_Maths;
   CONTAINS
-
 !-------------------------------
 ! Integrates the Element-Jacobian-Residual (Voight-notation)
 ! Total Lagrangian pressure-displacement-formulation (Active Strain)
