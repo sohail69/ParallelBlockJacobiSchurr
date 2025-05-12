@@ -9,6 +9,7 @@
 #
 
 clear
+module load openmpi-gcc7/4.0.4-cuda11.2
 export PARAFEM_DIR="/home/sar-local/X_Software/parafem/"
 cd src
 sh ./compile.bash
